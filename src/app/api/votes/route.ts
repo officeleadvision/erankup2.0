@@ -6,7 +6,7 @@ import Question from "@/models/Question";
 import mongoose from "mongoose";
 
 interface AddVoteRequestBody {
-  deviceToken: string;
+  token: string;
   questionText?: string;
   vote: VoteType;
 }
@@ -15,10 +15,10 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
-    const { deviceToken, questionText, vote }: AddVoteRequestBody =
+    const { token, questionText, vote }: AddVoteRequestBody =
       await request.json();
 
-    if (!deviceToken || !vote) {
+    if (!token || !vote) {
       return NextResponse.json(
         {
           success: false,
@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const device = await Device.findOne({ token: deviceToken });
+    const device = await Device.findOne({ token: token });
     if (!device) {
       return NextResponse.json(
         { success: false, message: "Device not found for the provided token." },
@@ -52,28 +52,19 @@ export async function POST(request: NextRequest) {
 
     let effectiveQuestion;
 
-    if (
-      deviceToken === "4Z1lRe4d" &&
-      questionText === "Бихте ли отседнали отново при нас?"
-    ) {
-      effectiveQuestion = {
-        question: questionText,
-      };
-    } else {
+    effectiveQuestion = await Question.findOne({
+      username: device.owner,
+      devices: {
+        $elemMatch: { $eq: device._id },
+      },
+      hidden: false,
+    }).sort({ date: -1, order: 1 });
+
+    if (!effectiveQuestion) {
       effectiveQuestion = await Question.findOne({
         username: device.owner,
-        devices: {
-          $elemMatch: { $eq: device._id },
-        },
-      }).sort({ date: -1 });
-
-      if (!effectiveQuestion) {
-        effectiveQuestion = await Question.findOne({
-          devices: device._id,
-          hidden: false,
-          username: device.owner,
-        }).sort({ date: -1 });
-      }
+        hidden: false,
+      }).sort({ date: -1, order: 1 });
     }
 
     if (!effectiveQuestion) {
