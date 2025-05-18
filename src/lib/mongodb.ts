@@ -1,5 +1,16 @@
 import mongoose from "mongoose";
 
+// Add mongoose to the NodeJS global type
+declare global {
+  // eslint-disable-next-line no-var
+  var mongoose:
+    | {
+        conn: typeof mongoose | null;
+        promise: Promise<typeof mongoose> | null;
+      }
+    | undefined;
+}
+
 const MONGODB_URI = process.env.MONGODB_URI;
 
 if (!MONGODB_URI) {
@@ -13,10 +24,13 @@ if (!MONGODB_URI) {
  * in development. This prevents connections from growing exponentially
  * during API Route usage.
  */
-let cached = global.mongoose;
+// @ts-ignore
+const cached = global.mongoose || { conn: null, promise: null };
 
-if (!cached) {
-  cached = global.mongoose = { conn: null, promise: null };
+// For development mode, we want to persist the connection in the global object
+if (!global.mongoose) {
+  // @ts-ignore
+  global.mongoose = cached;
 }
 
 async function dbConnect() {
@@ -29,6 +43,7 @@ async function dbConnect() {
       bufferCommands: false,
     };
 
+    // @ts-ignore
     cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
       return mongoose;
     });
@@ -38,10 +53,3 @@ async function dbConnect() {
 }
 
 export default dbConnect;
-
-declare global {
-  var mongoose: {
-    conn: typeof import("mongoose") | null;
-    promise: Promise<typeof import("mongoose")> | null;
-  };
-}
