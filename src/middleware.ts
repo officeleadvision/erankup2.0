@@ -33,6 +33,12 @@ export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   const method = request.method;
 
+  if (method === "GET" && pathname.startsWith("/api/questions/")) {
+    if (!pathname.startsWith("/api/questions/by-device-token/")) {
+      return NextResponse.next();
+    }
+  }
+
   const isDeviceRoute = pathname.startsWith("/api/devices");
 
   const isPublicPathMatch = PUBLIC_PATHS.some((rule) => {

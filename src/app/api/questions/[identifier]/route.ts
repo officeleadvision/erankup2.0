@@ -29,15 +29,75 @@ async function getUsernameFromToken(
   }
 }
 
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { identifier: string } }
+) {
+  try {
+    await dbConnect();
+    const resolvedParams = await params;
+    const { identifier: username } = resolvedParams;
+
+    if (!username) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Username parameter (identifier) is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    const questionsFromDB = await Question.find({
+      username: username,
+      hidden: false,
+    })
+      .populate({
+        path: "devices",
+        select: "label location",
+        model: Device,
+      })
+      .sort({ order: 1 })
+      .lean();
+
+    const transformedQuestions = questionsFromDB.map((q) => {
+      const devicesArray = Array.isArray(q.devices) ? q.devices : [];
+      return {
+        _id: q._id.toString(),
+        question: q.question,
+        order: q.order,
+        devices: devicesArray.map((d: any) => ({
+          label: d.label,
+          location: d.location,
+        })),
+      };
+    });
+
+    return NextResponse.json(
+      { success: true, msg: transformedQuestions },
+      { status: 200 }
+    );
+  } catch (error) {
+    let errorMessage = "Error fetching questions";
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+    return NextResponse.json(
+      { success: false, message: errorMessage },
+      { status: 500 }
+    );
+  }
+}
+
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { questionId: string } }
+  { params }: { params: { identifier: string } }
 ) {
   try {
     await dbConnect();
 
-    const params_resolved = await params;
-    const questionId = params_resolved.questionId;
+    const resolvedParams = await params;
+    const { identifier: questionId } = resolvedParams;
     const username = await getUsernameFromToken(request);
 
     if (!username) {
@@ -52,13 +112,15 @@ export async function PUT(
 
     if (!mongoose.Types.ObjectId.isValid(questionId)) {
       return NextResponse.json(
-        { success: false, message: "Invalid question ID format." },
+        {
+          success: false,
+          message: "Invalid question ID format provided in identifier.",
+        },
         { status: 400 }
       );
     }
 
     const body = await request.json();
-
     const questionText = body.questionText || body.question;
     const { deviceIds, hidden } = body;
 
@@ -80,7 +142,11 @@ export async function PUT(
     const existingQuestion = await Question.findOne({
       _id: questionId,
       username,
-    }).populate("devices");
+    }).populate({
+      path: "devices",
+      model: Device,
+      select: "label location _id",
+    });
 
     if (!existingQuestion) {
       return NextResponse.json(
@@ -101,38 +167,30 @@ export async function PUT(
 
     if (Array.isArray(deviceIds)) {
       if (deviceIds.length === 0) {
-        return NextResponse.json(
-          {
-            success: false,
-            message:
-              "Device IDs array cannot be empty if provided. To remove all devices, use a specific action or ensure at least one device is present.",
-          },
-          { status: 400 }
-        );
-      }
-
-      const validDeviceObjectIds: mongoose.Types.ObjectId[] = [];
-      for (const id of deviceIds) {
-        if (!mongoose.Types.ObjectId.isValid(id)) {
-          return NextResponse.json(
-            { success: false, message: `Invalid device ID format: ${id}` },
-            { status: 400 }
-          );
+        updatePayload.devices = [];
+      } else {
+        const validDeviceObjectIds: mongoose.Types.ObjectId[] = [];
+        for (const id of deviceIds) {
+          if (!mongoose.Types.ObjectId.isValid(id)) {
+            return NextResponse.json(
+              { success: false, message: `Invalid device ID format: ${id}` },
+              { status: 400 }
+            );
+          }
+          const device = await Device.findOne({ _id: id, owner: username });
+          if (!device) {
+            return NextResponse.json(
+              {
+                success: false,
+                message: `Device not found or not owned by user: ${id}`,
+              },
+              { status: 404 }
+            );
+          }
+          validDeviceObjectIds.push(new mongoose.Types.ObjectId(id));
         }
-        const device = await Device.findOne({ _id: id, owner: username });
-        if (!device) {
-          return NextResponse.json(
-            {
-              success: false,
-              message: `Device not found or not owned by user: ${id}`,
-            },
-            { status: 404 }
-          );
-        }
-        validDeviceObjectIds.push(new mongoose.Types.ObjectId(id));
+        updatePayload.devices = validDeviceObjectIds;
       }
-
-      updatePayload.devices = validDeviceObjectIds;
     }
 
     if (Object.keys(updatePayload).length === 0) {
@@ -147,7 +205,11 @@ export async function PUT(
       questionId,
       { $set: updatePayload },
       { new: true, runValidators: true }
-    ).populate({ path: "devices", model: Device });
+    ).populate({
+      path: "devices",
+      model: Device,
+      select: "label location _id",
+    });
 
     if (!updatedQuestion) {
       return NextResponse.json(
@@ -188,12 +250,12 @@ export async function PUT(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { questionId: string } }
+  { params }: { params: { identifier: string } }
 ) {
   try {
     await dbConnect();
-    const params_resolved = await params;
-    const questionId = params_resolved.questionId;
+    const resolvedParams = await params;
+    const { identifier: questionId } = resolvedParams;
     const username = await getUsernameFromToken(request);
 
     if (!username) {
@@ -205,13 +267,15 @@ export async function PATCH(
 
     if (!mongoose.Types.ObjectId.isValid(questionId)) {
       return NextResponse.json(
-        { success: false, message: "Invalid question ID format." },
+        {
+          success: false,
+          message: "Invalid question ID format provided in identifier.",
+        },
         { status: 400 }
       );
     }
 
     const body = await request.json();
-
     const updatePayload: Partial<Pick<IQuestion, "hidden" | "order">> = {};
     let reorderInstructions: { questionId: string; newOrder: number }[] = [];
 
@@ -245,13 +309,13 @@ export async function PATCH(
 
     try {
       if (Object.keys(updatePayload).length > 0) {
-        const updatedQuestion = await Question.findOneAndUpdate(
+        const updatedQuestionFromPatch = await Question.findOneAndUpdate(
           { _id: questionId, username },
           { $set: updatePayload },
           { new: true, session }
         );
 
-        if (!updatedQuestion) {
+        if (!updatedQuestionFromPatch) {
           await session.abortTransaction();
           session.endSession();
           return NextResponse.json(
@@ -284,7 +348,11 @@ export async function PATCH(
         _id: questionId,
         username,
       })
-        .populate({ path: "devices", model: Device })
+        .populate({
+          path: "devices",
+          model: Device,
+          select: "label location _id",
+        })
         .session(null);
 
       return NextResponse.json({
@@ -327,6 +395,3 @@ export async function PATCH(
     );
   }
 }
-
-// Note: True DELETE for questions is not implemented as original functionality was soft delete (hidden=true).
-// If hard delete is needed, a DELETE handler can be added here.

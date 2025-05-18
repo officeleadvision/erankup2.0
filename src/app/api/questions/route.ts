@@ -82,6 +82,7 @@ export async function POST(request: NextRequest) {
 
       await newQuestion.populate({
         path: "devices",
+        select: "label location _id",
         model: Device,
       });
 
