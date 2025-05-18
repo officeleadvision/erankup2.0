@@ -77,37 +77,30 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const db = mongoose.connection;
-    const votesCollection = db.collection("votes");
-
-    const deviceObject = {
-      _id: device._id,
+    const deviceObjectForVote = {
+      _id: device.id,
       owner: device.owner,
       location: device.location,
       label: device.label,
       token: device.token,
-      dateOfPlacement: device.dateOfPlacement,
-      __v: device.__v,
     };
 
-    const voteDocument = {
+    const voteDocumentToSave = {
       question: effectiveQuestion.question,
       date: new Date(),
       vote: vote,
-      device: deviceObject,
+      device: deviceObjectForVote,
       username: device.owner,
       location: device.location,
-      createdAt: new Date(),
-      updatedAt: new Date(),
     };
 
-    const result = await votesCollection.insertOne(voteDocument);
+    const savedVote = await Vote.create(voteDocumentToSave);
 
     return NextResponse.json(
       {
         success: true,
         message: "Vote submitted successfully",
-        voteId: result.insertedId,
+        voteId: savedVote._id,
       },
       { status: 201 }
     );
