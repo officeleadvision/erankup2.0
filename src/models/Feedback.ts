@@ -31,6 +31,7 @@ export interface IFeedback extends Document {
   location?: string;
   device_label?: string;
   translated_vote?: string;
+  linkedVoteId?: mongoose.Types.ObjectId | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -66,6 +67,11 @@ const FeedbackSchema: Schema<IFeedback> = new Schema(
     phone: { type: String, get: decrypt, set: encrypt },
     email: { type: String, get: decrypt, set: encrypt },
     comment: { type: String, get: decrypt, set: encrypt },
+    linkedVoteId: {
+      type: Schema.Types.ObjectId,
+      ref: "Vote",
+      default: null,
+    },
   },
   {
     timestamps: true,

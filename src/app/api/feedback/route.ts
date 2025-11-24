@@ -3,7 +3,7 @@ import dbConnect from "@/lib/mongodb";
 import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
 import User from "@/models/User";
-import { VoteType } from "@/models/Vote";
+import Vote, { VoteType } from "@/models/Vote";
 import mongoose from "mongoose";
 import { encrypt } from "@/lib/cryptoUtils";
 
@@ -22,6 +22,7 @@ interface CreateFeedbackRequestBody {
   question?: string;
   vote?: VoteType;
   votesList?: QuestionVoteItem[];
+  voteId?: string;
 }
 
 export async function POST(request: NextRequest) {
@@ -53,8 +54,62 @@ export async function POST(request: NextRequest) {
     const db = mongoose.connection;
     const feedbacksCollection = db.collection("feedbacks");
 
-    const newFeedbackDoc = {
-      question: feedbackObj.question || "Доволни ли сте от обслужването?",
+    const normalizedUsername = user.username.toLowerCase();
+    const effectiveQuestion =
+      feedbackObj.question || "Доволни ли сте от обслужването?";
+    let linkedVoteObjectId: mongoose.Types.ObjectId | null = null;
+
+    if (
+      feedbackObj.voteId &&
+      mongoose.Types.ObjectId.isValid(feedbackObj.voteId)
+    ) {
+      try {
+        const existingVote = await Vote.findById(feedbackObj.voteId).select(
+          "_id username device feedbackId question vote"
+        );
+
+        const voteDeviceToken =
+          existingVote &&
+          existingVote.device &&
+          typeof existingVote.device === "object"
+            ? (existingVote.device as any).token
+            : undefined;
+
+        if (
+          existingVote &&
+          (!existingVote.feedbackId || existingVote.feedbackId === null) &&
+          existingVote.username === normalizedUsername &&
+          voteDeviceToken === device.token &&
+          (!feedbackObj.vote || existingVote.vote === feedbackObj.vote) &&
+          (!feedbackObj.question || existingVote.question === feedbackObj.question)
+        ) {
+          linkedVoteObjectId = existingVote._id as mongoose.Types.ObjectId;
+        }
+      } catch (err) {
+        /* Ignore invalid vote linkage */
+      }
+    }
+
+    if (!linkedVoteObjectId && feedbackObj.vote) {
+      const recentWindowStart = new Date(Date.now() - 5 * 60 * 1000);
+      const recentVote = await Vote.findOne({
+        username: normalizedUsername,
+        vote: feedbackObj.vote,
+        question: effectiveQuestion,
+        "device.token": device.token,
+        $or: [{ feedbackId: { $exists: false } }, { feedbackId: null }],
+        date: { $gte: recentWindowStart },
+      })
+        .sort({ date: -1 })
+        .select("_id");
+
+      if (recentVote?._id) {
+        linkedVoteObjectId = recentVote._id as mongoose.Types.ObjectId;
+      }
+    }
+
+    const newFeedbackDoc: any = {
+      question: effectiveQuestion,
       username: user.username,
       devices: [device.toObject()],
       name: feedbackObj.name ? encrypt(feedbackObj.name) : null,
@@ -71,7 +126,18 @@ export async function POST(request: NextRequest) {
       date: new Date(),
     };
 
-    await feedbacksCollection.insertOne(newFeedbackDoc);
+    if (linkedVoteObjectId) {
+      newFeedbackDoc.linkedVoteId = linkedVoteObjectId;
+    }
+
+    const insertResult = await feedbacksCollection.insertOne(newFeedbackDoc);
+
+    if (linkedVoteObjectId) {
+      await Vote.updateOne(
+        { _id: linkedVoteObjectId },
+        { $set: { feedbackId: insertResult.insertedId } }
+      );
+    }
 
     return new Response("Feedback created!", { status: 201 });
   } catch (error) {

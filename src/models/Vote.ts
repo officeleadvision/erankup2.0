@@ -24,6 +24,7 @@ export interface IVote extends Document {
   question: string;
   vote_translated?: string; // This will be a virtual
   vote: VoteType;
+  feedbackId?: mongoose.Types.ObjectId | null;
   createdAt?: Date;
   updatedAt?: Date;
 }
@@ -46,6 +47,11 @@ const VoteSchema: Schema<IVote> = new Schema(
       type: String,
       enum: ["superlike", "like", "neutral", "dislike", "superdislike"],
       required: true,
+    },
+    feedbackId: {
+      type: Schema.Types.ObjectId,
+      ref: "Feedback",
+      default: null,
     },
   },
   {

@@ -110,6 +110,11 @@ export async function GET(request: NextRequest) {
       totalCount: "$count",
     };
 
+    const voteMatchStage: Record<string, any> = {
+      ...matchStage,
+      $or: [{ feedbackId: { $exists: false } }, { feedbackId: null }],
+    };
+
     const buildNormalizationStages = () => {
       const addFieldsStage = {
         $addFields: {
@@ -223,7 +228,7 @@ export async function GET(request: NextRequest) {
     ];
 
     const votePipeline: any[] = [
-      { $match: matchStage },
+      { $match: voteMatchStage },
       ...buildNormalizationStages(),
       {
         $project: {

@@ -71,6 +71,11 @@ export async function GET(request: NextRequest) {
       }
     }
 
+    const voteMatchStage: Record<string, any> = {
+      ...matchStage,
+      $or: [{ feedbackId: { $exists: false } }, { feedbackId: null }],
+    };
+
     const [feedbackAggregation, standaloneVoteAggregation] = await Promise.all([
       Feedback.aggregate([
         { $match: matchStage },
@@ -120,7 +125,7 @@ export async function GET(request: NextRequest) {
         { $sort: { _id: 1 } },
       ]),
       Vote.aggregate([
-        { $match: matchStage },
+        { $match: voteMatchStage },
         {
           $project: {
             vote: {
