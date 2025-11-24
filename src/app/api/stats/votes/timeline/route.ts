@@ -1,6 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
+import Feedback from "@/models/Feedback";
 import Vote from "@/models/Vote";
+
+const allowedVotes = [
+  "superlike",
+  "like",
+  "neutral",
+  "dislike",
+  "superdislike",
+] as const;
 
 export async function GET(request: NextRequest) {
   try {
@@ -21,10 +30,13 @@ export async function GET(request: NextRequest) {
 
     const matchStage: any = { username };
 
+    let startDateObj: Date | null = null;
+    let endDateObj: Date | null = null;
+
     if (startDateString && startDateString.trim() !== "") {
-      const startDateLocal = new Date(startDateString);
-      if (!isNaN(startDateLocal.getTime())) {
-        matchStage.date = { ...(matchStage.date || {}), $gte: startDateLocal };
+      const parsed = new Date(startDateString);
+      if (!isNaN(parsed.getTime())) {
+        startDateObj = parsed;
       } else {
         return NextResponse.json(
           { success: false, message: "Invalid startDate format." },
@@ -34,10 +46,10 @@ export async function GET(request: NextRequest) {
     }
 
     if (endDateQuery && endDateQuery.trim() !== "") {
-      const endDateLocal = new Date(endDateQuery);
-      if (!isNaN(endDateLocal.getTime())) {
-        endDateLocal.setHours(23, 59, 59, 999);
-        matchStage.date = { ...(matchStage.date || {}), $lte: endDateLocal };
+      const parsed = new Date(endDateQuery);
+      if (!isNaN(parsed.getTime())) {
+        parsed.setHours(23, 59, 59, 999);
+        endDateObj = parsed;
       } else {
         return NextResponse.json(
           { success: false, message: "Invalid endDate format." },
@@ -47,12 +59,12 @@ export async function GET(request: NextRequest) {
     }
 
     const groupFields: any = {
-      year: { $year: "$date" },
-      month: { $month: "$date" },
+      year: { $year: "$normalizedDate" },
+      month: { $month: "$normalizedDate" },
     };
 
     if (groupBy === "day") {
-      groupFields.day = { $dayOfMonth: "$date" };
+      groupFields.day = { $dayOfMonth: "$normalizedDate" };
     } else if (groupBy === "hour") {
       let dateRangeIsSingleDay = false;
       if (startDateString && endDateQuery) {
@@ -67,8 +79,8 @@ export async function GET(request: NextRequest) {
       }
 
       if (dateRangeIsSingleDay) {
-        groupFields.day = { $dayOfMonth: "$date" };
-        groupFields.hour = { $hour: "$date" };
+        groupFields.day = { $dayOfMonth: "$normalizedDate" };
+        groupFields.hour = { $hour: "$normalizedDate" };
       } else {
         return NextResponse.json(
           {
@@ -98,17 +110,206 @@ export async function GET(request: NextRequest) {
       totalCount: "$count",
     };
 
-    const pipeline: any[] = [
+    const buildNormalizationStages = () => {
+      const addFieldsStage = {
+        $addFields: {
+          normalizedDate: {
+            $switch: {
+              branches: [
+                {
+                  case: {
+                    $in: [
+                      { $type: "$date" },
+                      ["date", "timestamp"],
+                    ],
+                  },
+                  then: "$date",
+                },
+                {
+                  case: { $eq: [{ $type: "$date" }, "string"] },
+                  then: {
+                    $dateFromString: {
+                      dateString: "$date",
+                      onError: null,
+                      onNull: null,
+                    },
+                  },
+                },
+              ],
+              default: null,
+            },
+          },
+        },
+      };
+
+      const filterValidDateStage = {
+        $match: { normalizedDate: { $ne: null } },
+      };
+
+      const rangeMatchStage: any = { $match: {} };
+      if (startDateObj) {
+        rangeMatchStage.$match["normalizedDate"] = {
+          ...(rangeMatchStage.$match["normalizedDate"] || {}),
+          $gte: startDateObj,
+        };
+      }
+      if (endDateObj) {
+        rangeMatchStage.$match["normalizedDate"] = {
+          ...(rangeMatchStage.$match["normalizedDate"] || {}),
+          $lte: endDateObj,
+        };
+      }
+
+      const stages = [addFieldsStage, filterValidDateStage];
+      if (startDateObj || endDateObj) {
+        stages.push(rangeMatchStage);
+      }
+
+      return stages;
+    };
+
+    const feedbackPipeline: any[] = [
       { $match: matchStage },
-      { $group: groupStage },
+      ...buildNormalizationStages(),
+      {
+        $project: {
+          normalizedDate: 1,
+          votes: {
+            $concatArrays: [
+              {
+                $cond: [
+                  {
+                    $and: [
+                      { $ne: ["$vote", null] },
+                      { $ne: ["$vote", ""] },
+                    ],
+                  },
+                  [{ $toLower: "$vote" }],
+                  [],
+                ],
+              },
+              {
+                $map: {
+                  input: {
+                    $filter: {
+                      input: { $ifNull: ["$questionsVote", []] },
+                      as: "entry",
+                      cond: {
+                        $and: [
+                          { $ne: ["$$entry.vote", null] },
+                          { $ne: ["$$entry.vote", ""] },
+                        ],
+                      },
+                    },
+                  },
+                  as: "mappedVote",
+                  in: { $toLower: "$$mappedVote.vote" },
+                },
+              },
+            ],
+          },
+        },
+      },
+      { $unwind: "$votes" },
+      { $match: { votes: { $in: allowedVotes } } },
+      {
+        $group: {
+          _id: groupFields,
+          count: { $sum: 1 },
+        },
+      },
       { $sort: sortStage },
       { $project: projectStage },
     ];
 
-    const timeline = await Vote.aggregate(pipeline);
+    const votePipeline: any[] = [
+      { $match: matchStage },
+      ...buildNormalizationStages(),
+      {
+        $project: {
+          normalizedDate: 1,
+          vote: {
+            $cond: [
+              {
+                $and: [
+                  { $ne: ["$vote", null] },
+                  { $ne: ["$vote", ""] },
+                ],
+              },
+              { $toLower: "$vote" },
+              null,
+            ],
+          },
+        },
+      },
+      { $match: { vote: { $in: allowedVotes } } },
+      {
+        $group: {
+          _id: groupFields,
+          count: { $sum: 1 },
+        },
+      },
+      { $sort: sortStage },
+      { $project: projectStage },
+    ];
+
+    const [feedbackTimeline, standaloneVoteTimeline] = await Promise.all([
+      Feedback.aggregate(feedbackPipeline),
+      Vote.aggregate(votePipeline),
+    ]);
+
+    const combinedTimelineMap = new Map<
+      string,
+      { timePeriod: Record<string, number>; totalCount: number }
+    >();
+
+    const accumulateTimeline = (
+      items: Array<{ timePeriod: Record<string, number>; totalCount: number }>
+    ) => {
+      items.forEach((item) => {
+        const key = JSON.stringify(item.timePeriod);
+        const existing = combinedTimelineMap.get(key);
+        if (existing) {
+          existing.totalCount += item.totalCount;
+        } else {
+          combinedTimelineMap.set(key, {
+            timePeriod: item.timePeriod,
+            totalCount: item.totalCount,
+          });
+        }
+      });
+    };
+
+    accumulateTimeline(feedbackTimeline);
+    accumulateTimeline(standaloneVoteTimeline);
+
+    const compareTimePeriods = (
+      a: Record<string, number>,
+      b: Record<string, number>
+    ) => {
+      const order: Array<"year" | "month" | "day" | "hour"> = [
+        "year",
+        "month",
+        "day",
+        "hour",
+      ];
+      for (const field of order) {
+        const aValue = a?.[field] ?? 0;
+        const bValue = b?.[field] ?? 0;
+        if (aValue !== bValue) return aValue - bValue;
+      }
+      return 0;
+    };
+
+    const timeline = Array.from(combinedTimelineMap.values())
+      .sort((a, b) => compareTimePeriods(a.timePeriod, b.timePeriod))
+      .map(({ timePeriod, totalCount }) => ({ timePeriod, totalCount }));
 
     return NextResponse.json({ success: true, timeline });
   } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Error fetching vote timeline";
+    console.error("/api/stats/votes/timeline", message, error);
     return NextResponse.json(
       { success: false, message: "Error fetching vote timeline" },
       { status: 500 }

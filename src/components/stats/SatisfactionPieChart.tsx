@@ -11,6 +11,8 @@ ChartJS.register(ArcElement, Tooltip, Legend, Title, ChartDataLabels);
 interface VoteSummary {
   totalVotes: number;
   votesByType: Array<{ _id: string | null; count: number }>;
+  averageScore?: number | null;
+  averageLabel?: string | null;
 }
 
 interface SatisfactionPieChartProps {

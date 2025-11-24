@@ -27,6 +27,8 @@ ChartJS.register(
 interface VoteSummary {
   totalVotes: number;
   votesByType: Array<{ _id: string | null; count: number }>;
+  averageScore?: number | null;
+  averageLabel?: string | null;
 }
 
 interface SatisfactionBarChartProps {

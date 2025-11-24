@@ -1,12 +1,43 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
+
+const voteScoreMap: Record<string, number> = {
+  superdislike: 1,
+  dislike: 2,
+  neutral: 3,
+  like: 4,
+  superlike: 5,
+};
+
+const getVoteScore = (vote?: string | null) => {
+  if (!vote) return null;
+  const normalized = vote.toLowerCase();
+  return normalized in voteScoreMap ? voteScoreMap[normalized] : null;
+};
+
+const describeAverage = (avg: number | null) => {
+  if (avg === null) return "N/A";
+  if (avg >= 4.5) return "Много доволен";
+  if (avg >= 3.5) return "Доволен";
+  if (avg >= 2.5) return "Неутрален";
+  if (avg >= 1.5) return "Недоволен";
+  return "Много недоволен";
+};
+
+const voteDisplayConfig = [
+  { key: "superlike", label: "Много доволен", accent: "text-emerald-600" },
+  { key: "like", label: "Доволен", accent: "text-green-500" },
+  { key: "neutral", label: "Неутрален", accent: "text-slate-500" },
+  { key: "dislike", label: "Недоволен", accent: "text-amber-600" },
+  { key: "superdislike", label: "Много недоволен", accent: "text-red-600" },
+] as const;
 
 interface DeviceInFeedback {
   _id: string;
@@ -27,6 +58,7 @@ interface FeedbackItem {
   devices: DeviceInFeedback[];
   questionsVoteToString?: string;
   username?: string;
+  questionsVote?: { question?: string; vote?: string }[];
 }
 
 interface FeedbackApiResponse {
@@ -121,6 +153,39 @@ function FeedbackPageContent() {
     }
   };
 
+  const feedbackSummary = useMemo(() => {
+    const counts: Record<string, number> = {
+      superlike: 0,
+      like: 0,
+      neutral: 0,
+      dislike: 0,
+      superdislike: 0,
+    };
+
+    let totalScore = 0;
+    let totalCount = 0;
+
+    feedbackList.forEach((item) => {
+      const voteKey = (item.vote || "").toLowerCase();
+      const voteScore = getVoteScore(item.vote);
+      if (voteScore !== null && voteKey in counts) {
+        counts[voteKey] += 1;
+        totalScore += voteScore;
+        totalCount += 1;
+      }
+    });
+
+    const average = totalCount > 0 ? totalScore / totalCount : null;
+
+    return {
+      counts,
+      totalCount,
+      totalScore,
+      average,
+      label: describeAverage(average),
+    } as const;
+  }, [feedbackList]);
+
   return (
     <div className="p-4 md:p-6">
       <h2 className="text-2xl font-semibold text-slate-800 mb-6">
@@ -192,6 +257,67 @@ function FeedbackPageContent() {
         </div>
       </div>
 
+      {!isLoading && feedbackSummary.totalCount > 0 && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white shadow-md rounded-lg p-4 border border-slate-100">
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">
+              Средно удовлетворение
+            </p>
+            <div className="mt-2 flex items-baseline space-x-2">
+              <span className="text-3xl font-semibold text-indigo-600">
+                {feedbackSummary.average !== null
+                  ? feedbackSummary.average.toFixed(2)
+                  : "—"}
+              </span>
+              <span className="text-sm text-slate-500">/ 5</span>
+            </div>
+            <p className="mt-2 text-sm text-slate-600">
+              {feedbackSummary.label}
+            </p>
+            <p className="mt-4 text-xs text-slate-400">
+              Изчислено по формула Σ оценка / N, където оценките са
+              преобразувани в скала 1-5 (от „Много недоволен“ до „Много
+              доволен“).
+            </p>
+          </div>
+
+          <div className="bg-white shadow-md rounded-lg p-4 border border-slate-100">
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">
+              Общо гласове
+            </p>
+            <p className="mt-2 text-3xl font-semibold text-slate-800">
+              {feedbackSummary.totalCount}
+            </p>
+            <p className="mt-4 text-xs text-slate-400">
+              Брой валидни отговори със стойности за „Общо усещане“.
+            </p>
+          </div>
+
+          <div className="bg-white shadow-md rounded-lg p-4 border border-slate-100">
+            <p className="text-sm font-medium text-slate-500 uppercase tracking-wide">
+              Разпределение на гласовете
+            </p>
+            <div className="mt-3 space-y-2">
+              {voteDisplayConfig.map(({ key, label, accent }) => {
+                const count = feedbackSummary.counts[key] || 0;
+                const percentage =
+                  feedbackSummary.totalCount > 0
+                    ? Math.round((count / feedbackSummary.totalCount) * 100)
+                    : 0;
+                return (
+                  <div key={key} className="flex justify-between text-sm">
+                    <span className={`font-medium ${accent}`}>{label}</span>
+                    <span className="text-slate-600">
+                      {count} ({percentage}%)
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {isLoading && (
         <div className="flex justify-center items-center h-64">
           <Loader text="Зареждане на отзиви..." />
@@ -216,14 +342,53 @@ function FeedbackPageContent() {
               item.devices?.map((d) => d.location || "N/A").join("; ") ||
               "Не е посочено";
 
-            const sentimentColor =
-              item.translated_vote?.toLowerCase().includes("положит") ||
-              item.vote?.toLowerCase().includes("положит")
-                ? "bg-green-50 border-l-4 border-green-500"
-                : item.translated_vote?.toLowerCase().includes("отриц") ||
+            const perFeedbackScores: number[] = [];
+
+            const overallScore = getVoteScore(item.vote);
+            if (overallScore !== null) {
+              perFeedbackScores.push(overallScore);
+            }
+
+            if (Array.isArray(item.questionsVote)) {
+              item.questionsVote.forEach((voteEntry) => {
+                const entryScore = getVoteScore(voteEntry?.vote);
+                if (entryScore !== null) {
+                  perFeedbackScores.push(entryScore);
+                }
+              });
+            }
+
+            const averageScore =
+              perFeedbackScores.length > 0
+                ? perFeedbackScores.reduce((sum, value) => sum + value, 0) /
+                  perFeedbackScores.length
+                : null;
+
+            const averageLabel = describeAverage(averageScore);
+            const averageDisplay =
+              averageScore !== null
+                ? `${averageScore.toFixed(2)} / 5 (${averageLabel})`
+                : item.translated_vote || item.vote || "N/A";
+
+            const sentimentColor = (() => {
+              if (averageScore === null) {
+                return item.translated_vote?.toLowerCase().includes("отриц") ||
                   item.vote?.toLowerCase().includes("отриц")
-                ? "bg-red-50 border-l-4 border-red-500"
-                : "bg-slate-50 border-l-4 border-slate-300";
+                  ? "bg-red-50 border-l-4 border-red-500"
+                  : item.translated_vote?.toLowerCase().includes("положит") ||
+                    item.vote?.toLowerCase().includes("положит")
+                  ? "bg-green-50 border-l-4 border-green-500"
+                  : "bg-slate-50 border-l-4 border-slate-300";
+              }
+
+              if (averageScore >= 3.5) {
+                return "bg-green-50 border-l-4 border-green-500";
+              }
+              if (averageScore >= 2.5) {
+                return "bg-slate-50 border-l-4 border-slate-300";
+              }
+              return "bg-red-50 border-l-4 border-red-500";
+            })();
 
             return (
               <div
@@ -319,22 +484,8 @@ function FeedbackPageContent() {
                   {(item.vote || item.translated_vote) && (
                     <div className={`${sentimentColor} p-3 rounded mb-4`}>
                       <p className="text-sm flex items-center text-slate-800">
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          className="h-5 w-5 mr-2"
-                          viewBox="0 0 20 20"
-                          fill="currentColor"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM7 9a1 1 0 100-2 1 1 0 000 2zm7-1a1 1 0 11-2 0 1 1 0 012 0zm-7.536 5.879a1 1 0 001.415 0 3 3 0 014.242 0 1 1 0 001.415-1.415 5 5 0 00-7.072 0 1 1 0 000 1.415z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                        <span className="font-medium">Общо усещане: </span>
-                        <span className="ml-1">
-                          {item.translated_vote || item.vote || "N/A"}
-                        </span>
+                        <span className="font-medium">Средно усещане: </span>
+                        <span className="ml-1">{averageDisplay}</span>
                       </p>
                     </div>
                   )}

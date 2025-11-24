@@ -17,6 +17,8 @@ import { toast } from "react-toastify";
 interface VoteSummary {
   totalVotes: number;
   votesByType: Array<{ _id: string | null; count: number }>;
+  averageScore?: number | null;
+  averageLabel?: string | null;
 }
 
 interface VoteTimelinePoint {

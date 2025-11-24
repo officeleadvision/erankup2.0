@@ -5,6 +5,8 @@ import Loader from "@/components/ui/Loader";
 interface VoteSummary {
   totalVotes: number;
   votesByType: Array<{ _id: string | null; count: number }>;
+  averageScore?: number | null;
+  averageLabel?: string | null;
 }
 
 interface SummaryCardsProps {
@@ -70,6 +72,13 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary, isLoading }) => {
   }
 
   const totalVotesCard = summary.totalVotes;
+  const averageScore =
+    typeof summary.averageScore === "number" && !isNaN(summary.averageScore)
+      ? summary.averageScore
+      : null;
+  const averageScoreDisplay =
+    averageScore !== null ? averageScore.toFixed(2) : "—";
+  const averageLabel = summary.averageLabel || undefined;
   const votesMap = new Map(
     summary.votesByType.map((item) => [item._id, item.count])
   );
@@ -96,11 +105,17 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary, isLoading }) => {
   });
 
   return (
-    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4 mb-8">
+    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-7 gap-4 mb-8">
       <SummaryCard
         title="Общо гласове"
         value={totalVotesCard}
         bgColorClass="bg-blue-500"
+      />
+      <SummaryCard
+        title="Средно усещане"
+        value={averageScoreDisplay}
+        percentage={averageLabel}
+        bgColorClass="bg-indigo-500"
       />
       {cardsData.map((card) => (
         <SummaryCard

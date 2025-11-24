@@ -15,7 +15,7 @@ export const VOTE_TYPE_MAP: Record<
   "3": {
     label: "Неутрални",
     color: "#FFEE58",
-    backgroundColor: "rgba(255, 238, 88, 0.8)",
+    backgroundColor: "rgba(230, 179, 0, 0.8)",
   },
   "4": {
     label: "Недоволни",
@@ -36,6 +36,11 @@ export const VOTE_TYPE_MAP: Record<
     label: "Доволни",
     color: "#66BB6A",
     backgroundColor: "rgba(102, 187, 106, 0.8)",
+  },
+  neutral: {
+    label: "Неутрални",
+    color: "#FFEE58",
+    backgroundColor: "rgba(230, 179, 0, 0.8)",
   },
   dislike: {
     label: "Недоволни",
@@ -60,4 +65,10 @@ export const getVoteTypeDetails = (voteTypeId: string | null | undefined) => {
   };
 };
 
-export const VOTE_TYPE_ORDER = ["superlike", "like", "dislike", "superdislike"];
+export const VOTE_TYPE_ORDER = [
+  "superlike",
+  "like",
+  "neutral",
+  "dislike",
+  "superdislike",
+];
