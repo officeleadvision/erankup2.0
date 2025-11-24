@@ -231,7 +231,7 @@ function StatsPageContent() {
             id="startDate"
             value={startDate}
             onChange={(e) => setStartDate(e.target.value)}
-            className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full text-gray-900 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
         <div className="flex-1 w-full sm:w-auto">
@@ -246,7 +246,7 @@ function StatsPageContent() {
             id="endDate"
             value={endDate}
             onChange={(e) => setEndDate(e.target.value)}
-            className="w-full p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
+            className="w-full text-gray-900 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
         </div>
         <button

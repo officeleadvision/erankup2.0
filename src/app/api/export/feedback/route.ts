@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
+import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
 
@@ -35,6 +36,16 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDateString = searchParams.get("startDate");
     const endDateString = searchParams.get("endDate");
+    const requestedFormat = (searchParams.get("format") || "csv").toLowerCase();
+
+    if (requestedFormat !== "csv" && requestedFormat !== "xlsx") {
+      return NextResponse.json(
+        { success: false, message: "Invalid format. Use csv or xlsx." },
+        { status: 400 }
+      );
+    }
+
+    const format = requestedFormat as "csv" | "xlsx";
 
     const matchQuery: any = { username };
 
@@ -93,6 +104,7 @@ export async function GET(request: NextRequest) {
       "Username (Owner)",
     ];
 
+    const worksheetData: Array<Array<string | number>> = [headers];
     let csvString = headers.join(",") + "\r\n";
 
     for (const fb of feedbackItems) {
@@ -101,28 +113,53 @@ export async function GET(request: NextRequest) {
       const timePart = fbDate.toTimeString().split(" ")[0];
 
       const deviceLabels = fb.devices
-        .map((d) => (d as any).label || "N/A")
+        .map((d) => ((d as any).label || "N/A"))
         .join("; ");
       const deviceLocations = fb.devices
-        .map((d) => (d as any).location || "N/A")
+        .map((d) => ((d as any).location || "N/A"))
         .join("; ");
 
-      const row = [
+      const rowValues = [
         datePart,
         timePart,
-        escapeCsvField(fb.question),
-        escapeCsvField(fb.vote),
-        escapeCsvField(fb.translated_vote),
-        escapeCsvField(fb.name),
-        escapeCsvField(fb.phone),
-        escapeCsvField(fb.email),
-        escapeCsvField(fb.comment),
-        escapeCsvField(deviceLabels),
-        escapeCsvField(deviceLocations),
-        escapeCsvField(fb.questionsVoteToString),
-        escapeCsvField(fb.username),
-      ];
-      csvString += row.join(",") + "\r\n";
+        fb.question,
+        fb.vote,
+        fb.translated_vote,
+        fb.name,
+        fb.phone,
+        fb.email,
+        fb.comment,
+        deviceLabels,
+        deviceLocations,
+        fb.questionsVoteToString,
+        fb.username,
+      ].map((value) => (value === null || typeof value === "undefined" ? "" : value));
+
+      worksheetData.push(rowValues as Array<string | number>);
+      const csvRow = rowValues.map((value) => escapeCsvField(value));
+      csvString += csvRow.join(",") + "\r\n";
+    }
+
+    if (format === "xlsx") {
+      const workbook = XLSX.utils.book_new();
+      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Feedback");
+      const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
+
+      const responseHeaders = new Headers();
+      responseHeaders.set(
+        "Content-Type",
+        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+      );
+      responseHeaders.set(
+        "Content-Disposition",
+        'attachment; filename="feedback_export.xlsx"'
+      );
+
+      return new NextResponse(buffer, {
+        status: 200,
+        headers: responseHeaders,
+      });
     }
 
     const responseHeaders = new Headers();
@@ -137,7 +174,7 @@ export async function GET(request: NextRequest) {
       headers: responseHeaders,
     });
   } catch (error) {
-    let errorMessage = "Error exporting feedback to CSV";
+    let errorMessage = "Error exporting feedback";
     if (error instanceof Error) errorMessage = error.message;
     return NextResponse.json(
       { success: false, message: errorMessage },
