@@ -18,24 +18,49 @@ export async function POST(request: Request) {
       );
     }
 
-    const user = await User.findOne({
-      username: username.toLowerCase(),
+    const normalizedIdentifier = username.trim().toLowerCase();
+
+    const candidateUsers = await User.find({
+      $or: [{ username: normalizedIdentifier }, { user: normalizedIdentifier }],
     }).select("+password");
 
-    if (!user) {
+    if (!candidateUsers || candidateUsers.length === 0) {
       return NextResponse.json(
         { success: false, message: "Невалидни данни за вход" },
         { status: 401 }
       );
     }
 
-    const isPasswordValid = await user.authenticate(password);
+    const preferredUser = candidateUsers.find(
+      (candidate) => candidate.username === normalizedIdentifier
+    );
 
-    if (!isPasswordValid) {
-      return NextResponse.json(
-        { success: false, message: "Невалидни данни за вход" },
-        { status: 401 }
-      );
+    let authenticatedUser = null;
+
+    if (preferredUser) {
+      const isPasswordValid = await preferredUser.authenticate(password);
+      if (!isPasswordValid) {
+        return NextResponse.json(
+          { success: false, message: "Невалидни данни за вход" },
+          { status: 401 }
+        );
+      }
+      authenticatedUser = preferredUser;
+    } else {
+      for (const candidate of candidateUsers) {
+        const isPasswordValid = await candidate.authenticate(password);
+        if (isPasswordValid) {
+          authenticatedUser = candidate;
+          break;
+        }
+      }
+
+      if (!authenticatedUser) {
+        return NextResponse.json(
+          { success: false, message: "Невалидни данни за вход" },
+          { status: 401 }
+        );
+      }
     }
 
     const jwtSecret = process.env.JWT_SECRET;
@@ -46,8 +71,16 @@ export async function POST(request: Request) {
       );
     }
 
+    const accountIdentifier =
+      authenticatedUser.user || authenticatedUser.username;
+
     const token = jwt.sign(
-      { userId: user._id, username: user.username },
+      {
+        userId: authenticatedUser._id,
+        username: accountIdentifier,
+        login: authenticatedUser.username,
+        godmode: authenticatedUser.godmode ?? false,
+      },
       jwtSecret,
       {
         expiresIn: "2h",

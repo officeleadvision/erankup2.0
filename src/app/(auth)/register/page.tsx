@@ -56,7 +56,7 @@ function RegisterContent() {
             Достъпът е ограничен
           </h2>
           <p className="text-gray-600 dark:text-gray-300 mb-6">
-            Свържете се с вашият администратор
+            Свържете се с вашия администратор
           </p>
           <Link
             href="/login"

@@ -15,7 +15,24 @@ import {
 } from "@heroicons/react/24/outline";
 
 function DashboardHomePageContent() {
-  const { username } = useAuth();
+  const { username, godmode } = useAuth();
+
+  const appendGodmode = React.useCallback(
+    (href: string) => {
+      if (!godmode) {
+        return href;
+      }
+
+      const [path, queryString] = href.split("?");
+      const search = new URLSearchParams(queryString || "");
+      if (search.get("godmode") !== "true") {
+        search.set("godmode", "true");
+      }
+      const searchString = search.toString();
+      return searchString ? `${path}?${searchString}` : path;
+    },
+    [godmode]
+  );
 
   return (
     <div className="px-4 py-6 sm:px-0">
@@ -28,42 +45,42 @@ function DashboardHomePageContent() {
         </p>
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 md:gap-6 w-full max-w-4xl">
           <Link
-            href="/dashboard/devices"
+            href={appendGodmode("/dashboard/devices")}
             className="flex flex-col items-center justify-center bg-indigo-600 hover:bg-indigo-700 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <ComputerDesktopIcon className="h-8 w-8 mb-2" />
             <span className="text-sm">Управление на устройства</span>
           </Link>
           <Link
-            href="/dashboard/questions"
+            href={appendGodmode("/dashboard/questions")}
             className="flex flex-col items-center justify-center bg-purple-600 hover:bg-purple-700 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <QuestionMarkCircleIcon className="h-8 w-8 mb-2" />
             <span className="text-sm">Управление на въпроси</span>
           </Link>
           <Link
-            href="/dashboard/feedback"
+            href={appendGodmode("/dashboard/feedback")}
             className="flex flex-col items-center justify-center bg-cyan-600 hover:bg-cyan-700 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <ChatBubbleLeftEllipsisIcon className="h-8 w-8 mb-2" />
             <span className="text-sm">Отзиви</span>
           </Link>
           <Link
-            href="/dashboard/stats"
+            href={appendGodmode("/dashboard/stats")}
             className="flex flex-col items-center justify-center bg-green-600 hover:bg-green-700 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <ChartBarIcon className="h-8 w-8 mb-2" />
             <span className="text-sm">Преглед на статистики</span>
           </Link>
           <Link
-            href="/dashboard/export"
+            href={appendGodmode("/dashboard/export")}
             className="flex flex-col items-center justify-center bg-yellow-500 hover:bg-yellow-600 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <ArrowDownTrayIcon className="h-8 w-8 mb-2" />
             <span className="text-sm">Експорт на данни</span>
           </Link>
           <Link
-            href="/profile"
+            href={appendGodmode("/profile")}
             className="flex flex-col items-center justify-center bg-slate-600 hover:bg-slate-700 text-white font-semibold py-4 px-3 rounded-lg text-center transition duration-150 ease-in-out shadow-md hover:shadow-lg"
           >
             <KeyIcon className="h-8 w-8 mb-2" />

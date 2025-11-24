@@ -13,9 +13,11 @@ interface RegisterFormProps {
 
 export default function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [username, setUsernameState] = useState("");
+  const [accountAlias, setAccountAlias] = useState("");
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [godmode, setGodmode] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
@@ -38,16 +40,30 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
         user?: any;
       }>("/user", {
         method: "POST",
-        body: { username, password },
+        body: {
+          username,
+          password,
+          user: accountAlias || username,
+          godmode,
+        },
       });
 
       if (response.success && response.token) {
         login(response.token);
         toast.success("Регистрацията е успешна! Пренасочване...");
+        let redirectTo = "/dashboard";
+        try {
+          const decoded = JSON.parse(atob(response.token.split(".")[1]));
+          if (decoded?.godmode) {
+            redirectTo = "/dashboard?godmode=true";
+          }
+        } catch (parseError) {
+          console.error("Failed to decode token", parseError);
+        }
         if (onSuccess) {
           onSuccess();
         } else {
-          router.push("/dashboard");
+          router.push(redirectTo);
         }
       } else {
         const message =
@@ -89,6 +105,31 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
 
       <div>
         <label
+          htmlFor="accountAlias"
+          className="block text-sm font-medium leading-6 text-gray-700 dark:text-gray-300"
+        >
+          Споделено име на акаунт (по избор)
+        </label>
+        <div className="mt-2">
+          <input
+            id="accountAlias"
+            name="accountAlias"
+            type="text"
+            autoComplete="off"
+            value={accountAlias}
+            onChange={(e) => setAccountAlias(e.target.value.toLowerCase())}
+            className="block w-full px-4 py-2.5 rounded-xl border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-slate-700/50 dark:text-white dark:ring-slate-600 dark:placeholder:text-gray-500 dark:focus:ring-indigo-500"
+            placeholder="акаунт_общо"
+          />
+        </div>
+        <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+          Попълнете, за да споделяте устройства и настройки между няколко потребителя.
+          Оставете празно, за да съвпада с потребителското име.
+        </p>
+      </div>
+
+      <div>
+        <label
           htmlFor="password"
           className="block text-sm font-medium leading-6 text-gray-700 dark:text-gray-300"
         >
@@ -107,6 +148,23 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
             placeholder="••••••••"
           />
         </div>
+      </div>
+
+      <div className="flex items-center">
+        <input
+          id="godmode"
+          name="godmode"
+          type="checkbox"
+          checked={godmode}
+          onChange={(e) => setGodmode(e.target.checked)}
+          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+        />
+        <label
+          htmlFor="godmode"
+          className="ml-2 block text-sm text-gray-700 dark:text-gray-300"
+        >
+          Активирай God Mode за този акаунт
+        </label>
       </div>
 
       {error && (

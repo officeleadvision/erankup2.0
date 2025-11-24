@@ -72,7 +72,7 @@ function DevicesPageContent() {
 
   const handleAddDeviceClick = () => {
     if (!isGodMode) {
-      toast.warning("Свържете се с вашият администратор");
+      toast.warning("Свържете се с вашия администратор");
       return;
     }
     setIsAddModalOpen(true);
@@ -96,7 +96,7 @@ function DevicesPageContent() {
 
   const handleDeleteDeviceClick = (device: Device) => {
     if (!isGodMode) {
-      toast.warning("Свържете се с вашият администратор");
+      toast.warning("Свържете се с вашия администратор");
       return;
     }
     setDeviceToDelete(device);
@@ -148,7 +148,7 @@ function DevicesPageContent() {
           title={
             isGodMode
               ? "Добави ново устройство"
-              : "Свържете с вашият администратор"
+              : "Свържете с вашия администратор"
           }
         >
           <PlusIcon className="h-5 w-5 mr-2" />
@@ -228,7 +228,7 @@ function DevicesPageContent() {
                           : "text-gray-400 cursor-not-allowed"
                       } p-1 rounded-full transition-colors`}
                       title={
-                        isGodMode ? "Изтрий" : "Свържете с вашият администратор"
+                        isGodMode ? "Изтрий" : "Свържете с вашия администратор"
                       }
                     >
                       <TrashIcon className="h-5 w-5" />

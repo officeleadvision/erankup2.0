@@ -11,7 +11,7 @@ interface LoginFormProps {
 }
 
 export default function LoginForm({ onSuccess }: LoginFormProps) {
-  const [username, setUsernameState] = useState("");
+  const [identifier, setIdentifier] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -30,15 +30,24 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
         message?: string;
       }>("/authenticate", {
         method: "POST",
-        body: { username, password },
+        body: { username: identifier, password },
       });
 
       if (response.success && response.token) {
         login(response.token);
+        let redirectTo = "/dashboard";
+        try {
+          const decoded = JSON.parse(atob(response.token.split(".")[1]));
+          if (decoded?.godmode) {
+            redirectTo = "/dashboard?godmode=true";
+          }
+        } catch (parseError) {
+          console.error("Failed to decode token", parseError);
+        }
         if (onSuccess) {
           onSuccess();
         } else {
-          router.push("/dashboard");
+          router.push(redirectTo);
         }
       } else {
         setError(
@@ -61,7 +70,7 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
           htmlFor="username"
           className="block text-sm font-medium leading-6 text-gray-700 dark:text-gray-300"
         >
-          Потребителско име
+          Потребителско име или акаунт
         </label>
         <div className="mt-2">
           <input
@@ -70,10 +79,10 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
             type="text"
             autoComplete="username"
             required
-            value={username}
-            onChange={(e) => setUsernameState(e.target.value)}
+            value={identifier}
+            onChange={(e) => setIdentifier(e.target.value.toLowerCase())}
             className="block w-full px-4 py-2.5 rounded-xl border-0 text-gray-900 shadow-sm ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-inset focus:ring-indigo-600 dark:bg-slate-700/50 dark:text-white dark:ring-slate-600 dark:placeholder:text-gray-500 dark:focus:ring-indigo-500"
-            placeholder="вашето_име"
+            placeholder="потребител или акаунт"
           />
         </div>
       </div>

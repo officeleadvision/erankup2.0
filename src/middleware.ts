@@ -115,11 +115,20 @@ export async function middleware(request: NextRequest) {
 
       const requestHeaders = new Headers(request.headers);
       if (payload && typeof payload === "object") {
+        const payloadObject = payload as Record<string, unknown>;
         if (payload.userId) {
           requestHeaders.set("x-user-id", String(payload.userId));
         }
         if (payload.username) {
           requestHeaders.set("x-user-username", String(payload.username));
+        }
+        if (payloadObject.login) {
+          requestHeaders.set("x-user-login", String(payloadObject.login));
+        }
+        if (typeof payloadObject.godmode !== "undefined") {
+          const isGodmode =
+            payloadObject.godmode === true || payloadObject.godmode === "true";
+          requestHeaders.set("x-user-godmode", isGodmode ? "true" : "false");
         }
       }
       return NextResponse.next({ request: { headers: requestHeaders } });

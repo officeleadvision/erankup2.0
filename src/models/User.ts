@@ -3,6 +3,8 @@ import bcrypt from "bcryptjs";
 
 export interface IUser extends Document {
   username: string;
+  user?: string;
+  godmode?: boolean;
   password?: string;
   authenticate(password: string): Promise<boolean>;
 }
@@ -10,7 +12,9 @@ export interface IUser extends Document {
 const UserSchema: Schema<IUser> = new Schema(
   {
     username: { type: String, lowercase: true, required: true, unique: true },
+    user: { type: String, lowercase: true, index: true },
     password: { type: String, required: true, select: false },
+    godmode: { type: Boolean, default: false },
   },
   { timestamps: true, collection: "users" }
 );
@@ -26,6 +30,13 @@ UserSchema.pre<IUser>("save", async function (next) {
   } catch (err) {
     next(err as Error);
   }
+});
+
+UserSchema.pre<IUser>("save", function (next) {
+  if (!this.user) {
+    this.user = this.username;
+  }
+  next();
 });
 
 UserSchema.methods.authenticate = async function (

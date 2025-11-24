@@ -12,6 +12,8 @@ interface AuthContextType {
   token: string | null;
   userId: string | null;
   username: string | null;
+  loginUsername: string | null;
+  godmode: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
@@ -34,6 +36,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [token, setToken] = useState<string | null>(null);
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
+  const [loginUsername, setLoginUsername] = useState<string | null>(null);
+  const [godmode, setGodmode] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start as true until token is checked
   const [isInitialized, setIsInitialized] = useState(false); // Add state for isInitialized
 
@@ -46,17 +50,23 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setToken(storedToken);
         setUserId(decodedToken.userId || null);
         setUsername(decodedToken.username || null);
+        setLoginUsername(decodedToken.login || null);
+        setGodmode(Boolean(decodedToken.godmode));
       } else {
         localStorage.removeItem("authToken"); // Token expired or invalid
         setToken(null);
         setUserId(null);
         setUsername(null);
+        setLoginUsername(null);
+        setGodmode(false);
       }
     } else {
       // This is a normal expected state for first-time visitors, removing error message
       setToken(null);
       setUserId(null);
       setUsername(null);
+      setLoginUsername(null);
+      setGodmode(false);
     }
     setIsLoading(false);
     setIsInitialized(true); // Set isInitialized to true after attempting to load token
@@ -69,6 +79,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setToken(newToken);
       setUserId(decodedToken.userId || null);
       setUsername(decodedToken.username || null);
+      setLoginUsername(decodedToken.login || null);
+      setGodmode(Boolean(decodedToken.godmode));
     } else {
       console.error("Failed to parse token on login");
       // Potentially handle this error more gracefully
@@ -80,6 +92,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setToken(null);
     setUserId(null);
     setUsername(null);
+    setLoginUsername(null);
+    setGodmode(false);
   };
 
   return (
@@ -88,6 +102,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         token,
         userId,
         username,
+        loginUsername,
+        godmode,
         isAuthenticated: !!token,
         isLoading,
         isInitialized,

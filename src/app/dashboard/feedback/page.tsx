@@ -318,7 +318,7 @@ function FeedbackPageContent() {
                 <div className="p-4 sm:p-6">
                   {(item.vote || item.translated_vote) && (
                     <div className={`${sentimentColor} p-3 rounded mb-4`}>
-                      <p className="text-sm flex items-center">
+                      <p className="text-sm flex items-center text-slate-800">
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
                           className="h-5 w-5 mr-2"

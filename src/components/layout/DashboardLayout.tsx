@@ -42,9 +42,26 @@ const navigation = [
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { username, logout } = useAuth();
+  const { username, godmode, logout } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const appendGodmode = React.useCallback(
+    (href: string) => {
+      if (!godmode) {
+        return href;
+      }
+
+      const [path, queryString] = href.split("?");
+      const params = new URLSearchParams(queryString || "");
+      if (params.get("godmode") !== "true") {
+        params.set("godmode", "true");
+      }
+      const qs = params.toString();
+      return qs ? `${path}?${qs}` : path;
+    },
+    [godmode]
+  );
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -76,7 +93,10 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         }`}
       >
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-          <Link href="/dashboard" className="flex items-center space-x-2">
+          <Link
+            href={appendGodmode("/dashboard")}
+            className="flex items-center space-x-2"
+          >
             <Image
               src="/logo.png"
               alt="erankup1 Logo"
@@ -98,7 +118,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {navigation.map((item) => (
             <Link
               key={item.name}
-              href={item.href}
+              href={appendGodmode(item.href)}
               onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
               className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-150 ease-in-out ${
                 pathname === item.href ||
@@ -122,7 +142,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {username && (
           <div className="px-2 py-3 border-t border-slate-700">
             <Link
-              href="/profile"
+              href={appendGodmode("/profile")}
               onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
               className="block px-2 py-2 rounded-md hover:bg-slate-700 group"
             >
