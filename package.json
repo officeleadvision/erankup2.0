@@ -34,7 +34,7 @@
     "react-dom": "^19.0.0",
     "react-select": "^5.10.1",
     "react-toastify": "^11.0.5",
-    "xlsx": "^0.18.10"
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
