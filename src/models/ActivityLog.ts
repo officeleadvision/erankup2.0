@@ -1,6 +1,6 @@
 import mongoose, { Document, Model, Schema } from "mongoose";
 
-export type ActivityEntityType = "export" | "device" | "question";
+export type ActivityEntityType = "export" | "device" | "question" | "user";
 export type ActivityStatus = "success" | "error";
 
 export interface IActivityLog extends Document {
@@ -23,7 +23,7 @@ const ActivityLogSchema: Schema<IActivityLog> = new Schema(
     performedBy: { type: String, required: true },
     entityType: {
       type: String,
-      enum: ["export", "device", "question"],
+      enum: ["export", "device", "question", "user"],
       required: true,
       index: true,
     },

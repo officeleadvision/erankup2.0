@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname, useRouter } from "next/navigation";
@@ -17,13 +17,21 @@ import {
   Bars3Icon,
   XMarkIcon,
   ClipboardDocumentListIcon,
+  UsersIcon,
 } from "@heroicons/react/24/outline";
 
 interface DashboardLayoutProps {
   children: React.ReactNode;
 }
 
-const navigation = [
+type NavigationItem = {
+  name: string;
+  href: string;
+  icon: typeof HomeIcon;
+  requiresAdmin?: boolean;
+};
+
+const navigation: NavigationItem[] = [
   { name: "Табло", href: "/dashboard", icon: HomeIcon },
   { name: "Устройства", href: "/dashboard/devices", icon: ComputerDesktopIcon },
   {
@@ -38,14 +46,28 @@ const navigation = [
   },
   { name: "Статистики", href: "/dashboard/stats", icon: ChartBarIcon },
   { name: "Експорт", href: "/dashboard/export", icon: ArrowDownTrayIcon },
+  {
+    name: "Потребители",
+    href: "/dashboard/users",
+    icon: UsersIcon,
+    requiresAdmin: true,
+  },
   { name: "Логове", href: "/dashboard/logs", icon: ClipboardDocumentListIcon },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { username, logout } = useAuth();
+  const { username, logout, admin, godmode } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  const visibleNavigation = useMemo(
+    () =>
+      navigation.filter((item) =>
+        item.requiresAdmin ? admin || godmode : true
+      ),
+    [admin, godmode]
+  );
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -96,7 +118,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           </button>
         </div>
         <nav className="mt-4 flex-1 px-2 space-y-1">
-          {navigation.map((item) => (
+          {visibleNavigation.map((item) => (
             <Link
               key={item.name}
               href={item.href}

@@ -18,6 +18,8 @@ const PROTECTED_PATHS = [
   "/api/votes",
   "/api/stats/:path*",
   "/api/export/:path*",
+  "/api/users",
+  "/api/users/:path*",
 ];
 
 // Paths that are public

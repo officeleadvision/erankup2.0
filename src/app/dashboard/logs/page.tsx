@@ -6,7 +6,7 @@ import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 
-type ActivityEntityType = "export" | "device" | "question";
+type ActivityEntityType = "export" | "device" | "question" | "user";
 
 type ActivityLogEntry = {
   id: string;
@@ -53,6 +53,7 @@ function LogsPageContent() {
     export: "Експорт",
     device: "Устройство",
     question: "Въпрос",
+    user: "Потребител",
   };
 
   const formatChangeValue = (value: unknown): string => {
@@ -77,6 +78,8 @@ function LogsPageContent() {
     create: "Създаване",
     update: "Актуализация",
     delete: "Изтриване",
+    block: "Блокиране",
+    unblock: "Активиране",
     reorder: "Пренареждане",
     toggle: "Смяна на видимост",
     download: "Изтегляне",
@@ -184,7 +187,7 @@ function LogsPageContent() {
           Нямате достъп до логовете
         </h3>
         <p className="text-sm text-gray-600">
-          За да ореглеждат историята на действията, моля свържете се с
+          За да преглеждате историята на действията, моля свържете се с
           администратор.
         </p>
       </div>

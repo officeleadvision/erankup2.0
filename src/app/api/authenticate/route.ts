@@ -2,10 +2,12 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 import jwt from "jsonwebtoken";
+import { ensureBlockedField } from "@/lib/userMaintenance";
 
 export async function POST(request: Request) {
   try {
     await dbConnect();
+    await ensureBlockedField();
     const { username, password } = await request.json();
 
     if (!username || !password) {
@@ -61,6 +63,16 @@ export async function POST(request: Request) {
           { status: 401 }
         );
       }
+    }
+
+    if (authenticatedUser.blocked) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Акаунтът ви е блокиран. Свържете се с администратор.",
+        },
+        { status: 403 }
+      );
     }
 
     const jwtSecret = process.env.JWT_SECRET;
