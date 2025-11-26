@@ -35,19 +35,10 @@ export default function LoginForm({ onSuccess }: LoginFormProps) {
 
       if (response.success && response.token) {
         login(response.token);
-        let redirectTo = "/dashboard";
-        try {
-          const decoded = JSON.parse(atob(response.token.split(".")[1]));
-          if (decoded?.godmode) {
-            redirectTo = "/dashboard?godmode=true";
-          }
-        } catch (parseError) {
-          console.error("Failed to decode token", parseError);
-        }
         if (onSuccess) {
           onSuccess();
         } else {
-          router.push(redirectTo);
+          router.push("/dashboard");
         }
       } else {
         setError(

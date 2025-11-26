@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { getToken } from "next-auth/jwt";
+import { getToken, type GetTokenParams } from "next-auth/jwt";
 import Question from "@/models/Question";
 import dbConnect from "@/lib/mongodb";
-import User from "@/models/User";
+import { logActivity } from "@/lib/activityLogger";
 
 interface ReorderPayloadItem {
   questionId: string;
@@ -24,7 +24,7 @@ export async function PUT(request: NextRequest) {
     rawTokenString = authorizationHeader.substring(7);
   }
 
-  const getTokenParams: any = {
+  const getTokenParams: GetTokenParams = {
     req: request,
     secret: process.env.NEXTAUTH_SECRET,
   };
@@ -56,6 +56,9 @@ export async function PUT(request: NextRequest) {
 
     await dbConnect();
 
+    const username = request.headers.get("x-user-username");
+    const login = request.headers.get("x-user-login") || username || "unknown";
+
     const updatePromises = reorder.map((item) => {
       if (!item.questionId || typeof item.newOrder !== "number") {
         return Promise.resolve(null);
@@ -68,6 +71,21 @@ export async function PUT(request: NextRequest) {
     });
 
     await Promise.all(updatePromises);
+
+    if (username) {
+      await logActivity({
+        account: username,
+        performedBy: login,
+        entityType: "question",
+        action: "reorder",
+        status: "success",
+        message: "Questions reordered successfully.",
+        metadata: {
+          reorderCount: reorder.length,
+          sample: reorder.slice(0, 5),
+        },
+      });
+    }
 
     return NextResponse.json({
       success: true,

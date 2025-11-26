@@ -80,6 +80,7 @@ export async function POST(request: Request) {
         username: accountIdentifier,
         login: authenticatedUser.username,
         godmode: authenticatedUser.godmode ?? false,
+        admin: authenticatedUser.admin ?? false,
       },
       jwtSecret,
       {
@@ -92,7 +93,7 @@ export async function POST(request: Request) {
       message: "Успешен вход",
       token,
     });
-  } catch (error) {
+  } catch (_error) {
     return NextResponse.json(
       { success: false, message: "Вътрешна сървърна грешка" },
       { status: 500 }

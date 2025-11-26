@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Device from "@/models/Device";
+import { logActivity } from "@/lib/activityLogger";
 import randtoken from "rand-token";
 
 export async function POST(request: NextRequest) {
@@ -14,6 +15,7 @@ export async function POST(request: NextRequest) {
 
     const userId = request.headers.get("x-user-id");
     const username = request.headers.get("x-user-username");
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!userId || !username) {
       return NextResponse.json(
@@ -28,7 +30,7 @@ export async function POST(request: NextRequest) {
     let body;
     try {
       body = await request.json();
-    } catch (error) {
+    } catch {
       return NextResponse.json(
         {
           success: false,
@@ -66,6 +68,22 @@ export async function POST(request: NextRequest) {
     });
 
     await newDevice.save();
+
+    await logActivity({
+      account: username,
+      performedBy: login,
+      entityType: "device",
+      action: "create",
+      status: "success",
+      message: "Device created successfully",
+      entityId: String(newDevice._id),
+      entityName: label,
+      metadata: {
+        label,
+        location,
+        token: deviceToken,
+      },
+    });
 
     return NextResponse.json(
       {

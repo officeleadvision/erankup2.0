@@ -3,9 +3,8 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import Image from "next/image";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "@/contexts/AuthContext";
-import { useRouter } from "next/navigation";
 import {
   HomeIcon,
   ComputerDesktopIcon,
@@ -17,6 +16,7 @@ import {
   UserCircleIcon,
   Bars3Icon,
   XMarkIcon,
+  ClipboardDocumentListIcon,
 } from "@heroicons/react/24/outline";
 
 interface DashboardLayoutProps {
@@ -38,30 +38,14 @@ const navigation = [
   },
   { name: "Статистики", href: "/dashboard/stats", icon: ChartBarIcon },
   { name: "Експорт", href: "/dashboard/export", icon: ArrowDownTrayIcon },
+  { name: "Логове", href: "/dashboard/logs", icon: ClipboardDocumentListIcon },
 ];
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { username, godmode, logout } = useAuth();
+  const { username, logout } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-
-  const appendGodmode = React.useCallback(
-    (href: string) => {
-      if (!godmode) {
-        return href;
-      }
-
-      const [path, queryString] = href.split("?");
-      const params = new URLSearchParams(queryString || "");
-      if (params.get("godmode") !== "true") {
-        params.set("godmode", "true");
-      }
-      const qs = params.toString();
-      return qs ? `${path}?${qs}` : path;
-    },
-    [godmode]
-  );
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -93,10 +77,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         }`}
       >
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
-          <Link
-            href={appendGodmode("/dashboard")}
-            className="flex items-center space-x-2"
-          >
+          <Link href="/dashboard" className="flex items-center space-x-2">
             <Image
               src="/logo.png"
               alt="erankup1 Logo"
@@ -118,7 +99,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           {navigation.map((item) => (
             <Link
               key={item.name}
-              href={appendGodmode(item.href)}
+              href={item.href}
               onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
               className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-150 ease-in-out ${
                 pathname === item.href ||
@@ -142,7 +123,7 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
         {username && (
           <div className="px-2 py-3 border-t border-slate-700">
             <Link
-              href={appendGodmode("/profile")}
+              href="/profile"
               onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
               className="block px-2 py-2 rounded-md hover:bg-slate-700 group"
             >

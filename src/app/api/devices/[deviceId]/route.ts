@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Device, { IDevice } from "@/models/Device";
+import { logActivity } from "@/lib/activityLogger";
 import mongoose from "mongoose";
 
 interface DeviceUpdateRequest {
@@ -16,6 +17,7 @@ export async function PUT(
   try {
     await dbConnect();
     const username = request.headers.get("x-user-username");
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -45,6 +47,21 @@ export async function PUT(
       );
     }
 
+    const existingDevice = await Device.findOne({
+      _id: deviceId,
+      owner: username,
+    });
+
+    if (!existingDevice) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Device not found or user not authorized to update.",
+        },
+        { status: 404 }
+      );
+    }
+
     const updateData: Partial<IDevice> = {};
     if (label) updateData.label = label;
     if (location) updateData.location = location;
@@ -64,6 +81,39 @@ export async function PUT(
         { status: 404 }
       );
     }
+
+    const changes: Array<{ field: string; from?: string; to?: string }> = [];
+    if (typeof label === "string" && label !== existingDevice.label) {
+      changes.push({
+        field: "label",
+        from: existingDevice.label,
+        to: label,
+      });
+    }
+    if (typeof location === "string" && location !== existingDevice.location) {
+      changes.push({
+        field: "location",
+        from: existingDevice.location || "",
+        to: location,
+      });
+    }
+
+    await logActivity({
+      account: username,
+      performedBy: login,
+      entityType: "device",
+      action: "update",
+      status: "success",
+      message: "Device updated successfully",
+      entityId: String(updatedDevice._id),
+      entityName: updatedDevice.label,
+      metadata: {
+        updatedFields: Object.keys(updateData),
+        label: updatedDevice.label,
+        location: updatedDevice.location,
+        changes,
+      },
+    });
 
     return NextResponse.json(
       {
@@ -99,6 +149,7 @@ export async function DELETE(
   try {
     await dbConnect();
     const username = request.headers.get("x-user-username");
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -128,6 +179,22 @@ export async function DELETE(
         { status: 404 }
       );
     }
+
+    await logActivity({
+      account: username,
+      performedBy: login,
+      entityType: "device",
+      action: "delete",
+      status: "success",
+      message: "Device deleted successfully",
+      entityId: String(deletedDevice._id),
+      entityName: deletedDevice.label,
+      metadata: {
+        label: deletedDevice.label,
+        location: deletedDevice.location,
+        token: deletedDevice.token,
+      },
+    });
 
     return NextResponse.json(
       {

@@ -5,7 +5,7 @@ import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { ArrowDownTrayIcon } from "@heroicons/react/24/outline"; // Import Heroicon
+import { ArrowDownTrayIcon } from "@heroicons/react/24/outline";
 import { toast } from "react-toastify";
 
 type ExportFormat = "csv" | "xlsx";
@@ -90,12 +90,13 @@ function ExportPageContent() {
           type === "votes" ? "гласове" : "отзиви"
         } е успешен! Файлът е изтеглен.`
       );
-    } catch (err: any) {
+    } catch (err: unknown) {
       const message =
-        err.message ||
-        `Неуспешен експорт на ${
-          type === "votes" ? "гласове" : "отзиви"
-        }. Моля, опитайте отново.`;
+        err instanceof Error
+          ? err.message
+          : `Неуспешен експорт на ${
+              type === "votes" ? "гласове" : "отзиви"
+            }. Моля, опитайте отново.`;
       toast.error(message);
     } finally {
       setIsExporting(false);

@@ -14,6 +14,7 @@ interface AuthContextType {
   username: string | null;
   loginUsername: string | null;
   godmode: boolean;
+  admin: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
   isInitialized: boolean;
@@ -38,6 +39,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [username, setUsername] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState<string | null>(null);
   const [godmode, setGodmode] = useState(false);
+  const [admin, setAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start as true until token is checked
   const [isInitialized, setIsInitialized] = useState(false); // Add state for isInitialized
 
@@ -52,6 +54,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUsername(decodedToken.username || null);
         setLoginUsername(decodedToken.login || null);
         setGodmode(Boolean(decodedToken.godmode));
+        setAdmin(Boolean(decodedToken.admin));
       } else {
         localStorage.removeItem("authToken"); // Token expired or invalid
         setToken(null);
@@ -59,6 +62,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUsername(null);
         setLoginUsername(null);
         setGodmode(false);
+        setAdmin(false);
       }
     } else {
       // This is a normal expected state for first-time visitors, removing error message
@@ -67,6 +71,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUsername(null);
       setLoginUsername(null);
       setGodmode(false);
+      setAdmin(false);
     }
     setIsLoading(false);
     setIsInitialized(true); // Set isInitialized to true after attempting to load token
@@ -81,6 +86,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUsername(decodedToken.username || null);
       setLoginUsername(decodedToken.login || null);
       setGodmode(Boolean(decodedToken.godmode));
+      setAdmin(Boolean(decodedToken.admin));
     } else {
       console.error("Failed to parse token on login");
       // Potentially handle this error more gracefully
@@ -94,6 +100,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUsername(null);
     setLoginUsername(null);
     setGodmode(false);
+    setAdmin(false);
   };
 
   return (
@@ -104,6 +111,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         username,
         loginUsername,
         godmode,
+        admin,
         isAuthenticated: !!token,
         isLoading,
         isInitialized,

@@ -3,6 +3,7 @@ import dbConnect from "@/lib/mongodb";
 import Question from "@/models/Question";
 import Device from "@/models/Device";
 import mongoose from "mongoose";
+import { logActivity } from "@/lib/activityLogger";
 
 async function getUsernameFromToken(
   request: NextRequest
@@ -15,6 +16,7 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect();
     const username = await getUsernameFromToken(request);
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -84,6 +86,22 @@ export async function POST(request: NextRequest) {
         path: "devices",
         select: "label location _id",
         model: Device,
+      });
+
+      await logActivity({
+        account: username,
+        performedBy: login,
+        entityType: "question",
+        action: "create",
+        status: "success",
+        message: "Question created successfully",
+        entityId: String(newQuestion._id),
+        entityName: newQuestion.question,
+        metadata: {
+          deviceIds: validDeviceObjectIds.map((id) => id.toString()),
+          deviceCount: validDeviceObjectIds.length,
+          order: newOrder,
+        },
       });
 
       return NextResponse.json(
@@ -164,7 +182,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ success: true, questions }, { status: 200 });
   } catch (error) {
     let errorMessage = "Error fetching questions";
-    let statusCode = 500;
+    const statusCode = 500;
 
     if (error instanceof Error) {
       errorMessage = error.message;

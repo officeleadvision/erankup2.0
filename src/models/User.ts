@@ -5,6 +5,7 @@ export interface IUser extends Document {
   username: string;
   user?: string;
   godmode?: boolean;
+  admin?: boolean;
   password?: string;
   authenticate(password: string): Promise<boolean>;
 }
@@ -15,6 +16,7 @@ const UserSchema: Schema<IUser> = new Schema(
     user: { type: String, lowercase: true, index: true },
     password: { type: String, required: true, select: false },
     godmode: { type: Boolean, default: false },
+    admin: { type: Boolean, default: false },
   },
   { timestamps: true, collection: "users" }
 );

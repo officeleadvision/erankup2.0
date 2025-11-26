@@ -4,6 +4,12 @@ import Question, { IQuestion } from "@/models/Question";
 import Device from "@/models/Device";
 import mongoose from "mongoose";
 import * as jwt from "jsonwebtoken";
+import { logActivity } from "@/lib/activityLogger";
+
+type LeanDevice = {
+  label?: string | null;
+  location?: string | null;
+};
 
 interface DecodedToken {
   userId: string;
@@ -24,7 +30,7 @@ async function getUsernameFromToken(
   try {
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as DecodedToken;
     return decoded.username;
-  } catch (error) {
+  } catch {
     return null;
   }
 }
@@ -63,10 +69,10 @@ export async function GET(
     const transformedQuestions = questionsFromDB.map((q) => {
       const devicesArray = Array.isArray(q.devices) ? q.devices : [];
       return {
-        _id: q._id.toString(),
+        _id: String(q._id),
         question: q.question,
         order: q.order,
-        devices: devicesArray.map((d: any) => ({
+        devices: devicesArray.map((d: LeanDevice) => ({
           label: d.label,
           location: d.location,
         })),
@@ -99,6 +105,7 @@ export async function PUT(
     const resolvedParams = await params;
     const { identifier: questionId } = resolvedParams;
     const username = await getUsernameFromToken(request);
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -155,7 +162,7 @@ export async function PUT(
       );
     }
 
-    const updatePayload: any = {};
+    const updatePayload: Partial<IQuestion> = {};
 
     if (questionText) {
       updatePayload.question = questionText;
@@ -221,6 +228,75 @@ export async function PUT(
       );
     }
 
+    const changes: Array<{ field: string; from?: unknown; to?: unknown }> = [];
+    if (
+      typeof questionText === "string" &&
+      questionText !== existingQuestion.question
+    ) {
+      changes.push({
+        field: "question",
+        from: existingQuestion.question,
+        to: questionText,
+      });
+    }
+    if (typeof hidden === "boolean" && hidden !== existingQuestion.hidden) {
+      changes.push({
+        field: "hidden",
+        from: existingQuestion.hidden ?? false,
+        to: hidden,
+      });
+    }
+    if (Array.isArray(deviceIds)) {
+      const extractDeviceIds = (
+        devices: mongoose.Types.Array<mongoose.Types.ObjectId> | unknown[]
+      ) =>
+        (Array.isArray(devices) ? devices : []).map((device) => {
+          if (
+            device &&
+            typeof device === "object" &&
+            "_id" in device &&
+            (device as { _id: mongoose.Types.ObjectId | string })._id
+          ) {
+            const raw = (device as { _id: mongoose.Types.ObjectId | string })
+              ._id;
+            return typeof raw === "string" ? raw : raw.toString();
+          }
+          return String(device);
+        });
+
+      const previousDevices = extractDeviceIds(existingQuestion.devices);
+      const newDevices = extractDeviceIds(updatedQuestion.devices);
+      if (previousDevices.join(",") !== newDevices.join(",")) {
+        changes.push({
+          field: "devices",
+          from: previousDevices,
+          to: newDevices,
+        });
+      }
+    }
+
+    await logActivity({
+      account: username,
+      performedBy: login,
+      entityType: "question",
+      action: "update",
+      status: "success",
+      message: "Question updated successfully",
+      entityId: String(updatedQuestion._id),
+      entityName: updatedQuestion.question,
+      metadata: {
+        updatedFields: Object.keys(updatePayload),
+        changes,
+        hidden:
+          typeof updatedQuestion.hidden === "boolean"
+            ? updatedQuestion.hidden
+            : undefined,
+        deviceCount: Array.isArray(updatedQuestion.devices)
+          ? updatedQuestion.devices.length
+          : 0,
+      },
+    });
+
     return NextResponse.json({
       success: true,
       message: "Question updated successfully",
@@ -257,6 +333,7 @@ export async function PATCH(
     const resolvedParams = await params;
     const { identifier: questionId } = resolvedParams;
     const username = await getUsernameFromToken(request);
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -272,6 +349,21 @@ export async function PATCH(
           message: "Invalid question ID format provided in identifier.",
         },
         { status: 400 }
+      );
+    }
+
+    const originalQuestion = await Question.findOne({
+      _id: questionId,
+      username,
+    }).lean();
+
+    if (!originalQuestion) {
+      return NextResponse.json(
+        {
+          success: false,
+          message: "Question not found or not owned by user.",
+        },
+        { status: 404 }
       );
     }
 
@@ -302,6 +394,27 @@ export async function PATCH(
         },
         { status: 400 }
       );
+    }
+
+    const reorderSnapshotMap = new Map<
+      string,
+      { order?: number; question?: string }
+    >();
+
+    if (reorderInstructions.length > 0) {
+      const reorderIds = reorderInstructions.map((item) => item.questionId);
+      const existingReorderQuestions = await Question.find({
+        _id: { $in: reorderIds },
+        username,
+      })
+        .select("_id order question")
+        .lean();
+      existingReorderQuestions.forEach((doc) => {
+        reorderSnapshotMap.set(doc._id.toString(), {
+          order: typeof doc.order === "number" ? doc.order : undefined,
+          question: doc.question,
+        });
+      });
     }
 
     const session = await mongoose.startSession();
@@ -354,6 +467,87 @@ export async function PATCH(
           select: "label location _id",
         })
         .session(null);
+
+      if (finalQuestion) {
+        const action =
+          reorderInstructions.length > 0
+            ? "reorder"
+            : typeof updatePayload.hidden === "boolean"
+            ? "toggle"
+            : "update";
+
+        const reorderDetails =
+          reorderInstructions.length > 0
+            ? reorderInstructions.map(({ questionId, newOrder }) => {
+                const snapshot = reorderSnapshotMap.get(questionId);
+                return {
+                  questionId,
+                  question: snapshot?.question,
+                  fromOrder:
+                    typeof snapshot?.order === "number"
+                      ? snapshot?.order
+                      : undefined,
+                  toOrder: newOrder,
+                };
+              })
+            : [];
+
+        const changes: Array<{
+          field: string;
+          from?: unknown;
+          to?: unknown;
+          description?: string;
+          details?: Array<Record<string, unknown>>;
+        }> = [];
+
+        if (typeof updatePayload.hidden === "boolean") {
+          changes.push({
+            field: "hidden",
+            from: originalQuestion.hidden ?? false,
+            to: finalQuestion.hidden ?? false,
+          });
+        }
+
+        if (typeof updatePayload.order === "number") {
+          changes.push({
+            field: "order",
+            from: originalQuestion.order,
+            to: finalQuestion.order,
+          });
+        }
+
+        if (reorderInstructions.length > 0) {
+          changes.push({
+            field: "reorder",
+            description: `Пренаредени ${reorderInstructions.length} въпроса`,
+            details: reorderDetails,
+          });
+        }
+
+        await logActivity({
+          account: username,
+          performedBy: login,
+          entityType: "question",
+          action,
+          status: "success",
+          message: "Question updated successfully.",
+          entityId: String(finalQuestion._id),
+          entityName: finalQuestion.question,
+          metadata: {
+            updatedFields: Object.keys(updatePayload),
+            changes,
+            hidden:
+              typeof updatePayload.hidden === "boolean"
+                ? finalQuestion.hidden
+                : undefined,
+            order:
+              typeof updatePayload.order === "number"
+                ? finalQuestion.order
+                : undefined,
+            reorderCount: reorderInstructions.length,
+          },
+        });
+      }
 
       return NextResponse.json({
         success: true,

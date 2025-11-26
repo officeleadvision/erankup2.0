@@ -11,7 +11,6 @@ import EditDeviceForm from "@/components/devices/EditDeviceForm";
 import { PlusIcon, PencilIcon, TrashIcon } from "@heroicons/react/24/outline";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
-import { useSearchParams } from "next/navigation";
 
 interface Device {
   _id: string;
@@ -32,9 +31,8 @@ const formatDateBG = (dateString: string): string => {
 };
 
 function DevicesPageContent() {
-  const { token } = useAuth();
-  const searchParams = useSearchParams();
-  const isGodMode = searchParams.get("godmode") === "true";
+  const { token, godmode } = useAuth();
+  const isGodMode = Boolean(godmode);
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -43,7 +41,6 @@ function DevicesPageContent() {
   const [isConfirmDeleteModalOpen, setIsConfirmDeleteModalOpen] =
     useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSubmittingDelete, setIsSubmittingDelete] = useState(false);
 
   const fetchDevices = useCallback(async () => {
@@ -117,8 +114,11 @@ function DevicesPageContent() {
       setDevices(devices.filter((d) => d._id !== deviceToDelete._id));
       setIsConfirmDeleteModalOpen(false);
       setDeviceToDelete(null);
-    } catch (err: any) {
-      const message = err.message || "Неуспешно изтриване на устройство";
+    } catch (err: unknown) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Неуспешно изтриване на устройство";
       toast.error(message);
     }
     setIsSubmittingDelete(false);
@@ -287,8 +287,8 @@ function DevicesPageContent() {
         >
           <div className="p-4">
             <p className="text-sm text-gray-700 mb-4">
-              Сигурни ли сте, че искате да изтриете устройството "
-              <strong>{deviceToDelete.label}</strong>"? Това действие не може да
+              Сигурни ли сте, че искате да изтриете устройството „
+              <strong>{deviceToDelete.label}</strong>“? Това действие не може да
               бъде отменено.
             </p>
             <div className="flex justify-end space-x-3">

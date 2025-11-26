@@ -2,11 +2,17 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
+import { logActivity } from "@/lib/activityLogger";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
 
-function escapeCsvField(field: any): string {
+type PopulatedDevice = {
+  label?: string | null;
+  location?: string | null;
+};
+
+function escapeCsvField(field: unknown): string {
   if (field === null || typeof field === "undefined") {
     return "";
   }
@@ -25,6 +31,7 @@ export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     const username = request.headers.get("x-user-username");
+    const login = request.headers.get("x-user-login") || username || "unknown";
 
     if (!username) {
       return NextResponse.json(
@@ -47,38 +54,87 @@ export async function GET(request: NextRequest) {
 
     const format = requestedFormat as "csv" | "xlsx";
 
-    const matchQuery: Record<string, any> = { username };
-
-    if (startDateString && startDateString.trim() !== "") {
-      const startDate = new Date(startDateString);
-      if (!isNaN(startDate.getTime())) {
-        matchQuery.date = { ...(matchQuery.date || {}), $gte: startDate };
-      } else {
-        return NextResponse.json(
-          { success: false, message: "Invalid startDate format." },
-          { status: 400 }
-        );
-      }
+    const startDate =
+      startDateString && startDateString.trim() !== ""
+        ? new Date(startDateString)
+        : null;
+    if (startDate && isNaN(startDate.getTime())) {
+      return NextResponse.json(
+        { success: false, message: "Invalid startDate format." },
+        { status: 400 }
+      );
     }
 
-    if (endDateString && endDateString.trim() !== "") {
-      const endDate = new Date(endDateString);
-      if (!isNaN(endDate.getTime())) {
-        endDate.setHours(23, 59, 59, 999);
-        matchQuery.date = { ...(matchQuery.date || {}), $lte: endDate };
-      } else {
-        return NextResponse.json(
-          { success: false, message: "Invalid endDate format." },
-          { status: 400 }
-        );
-      }
+    const endDateRaw =
+      endDateString && endDateString.trim() !== ""
+        ? new Date(endDateString)
+        : null;
+    if (endDateRaw && isNaN(endDateRaw.getTime())) {
+      return NextResponse.json(
+        { success: false, message: "Invalid endDate format." },
+        { status: 400 }
+      );
+    }
+
+    const endDate =
+      endDateRaw !== null ? new Date(endDateRaw.getTime()) : endDateRaw;
+    if (endDate) {
+      endDate.setHours(23, 59, 59, 999);
+    }
+
+    type DateQuery = {
+      $gte?: Date;
+      $lte?: Date;
+    };
+
+    const matchQuery: { username: string; date?: DateQuery } = { username };
+
+    if (startDate) {
+      matchQuery.date = { ...(matchQuery.date || {}), $gte: startDate };
+    }
+
+    if (endDate) {
+      matchQuery.date = { ...(matchQuery.date || {}), $lte: endDate };
     }
 
     const feedbackEntries = await Feedback.find(matchQuery)
       .populate({ path: "devices", model: Device, select: "label location" })
       .sort({ date: -1 });
 
+    const persistExportActivity = async (
+      status: "success" | "error",
+      message: string,
+      rowsOverride?: number
+    ) => {
+      try {
+        const totalRows =
+          typeof rowsOverride === "number" ? rowsOverride : feedbackEntries.length;
+        await logActivity({
+          account: username,
+          performedBy: login,
+          entityType: "export",
+          action: "votes",
+          status,
+          message,
+          metadata: {
+            exportType: "votes",
+            format,
+            startDate: startDateString,
+            endDate: endDateString,
+            totalRows,
+          },
+        });
+      } catch (logError) {
+        console.error("Failed to persist votes export log", logError);
+      }
+    };
+
     if (feedbackEntries.length === 0) {
+      await persistExportActivity(
+        "error",
+        "No feedback entries found for the selected criteria to export as votes.",
+        0
+      );
       return NextResponse.json(
         {
           success: false,
@@ -112,14 +168,12 @@ export async function GET(request: NextRequest) {
       const datePart = entryDate.toISOString().split("T")[0];
       const timePart = entryDate.toTimeString().split(" ")[0];
 
-      const deviceLabel =
+      const primaryDevice =
         entry.devices && entry.devices.length > 0
-          ? (entry.devices[0] as any).label
-          : "";
-      const deviceLocation =
-        entry.devices && entry.devices.length > 0
-          ? (entry.devices[0] as any).location
-          : "";
+          ? (entry.devices[0] as PopulatedDevice)
+          : null;
+      const deviceLabel = primaryDevice?.label ?? "";
+      const deviceLocation = primaryDevice?.location ?? "";
 
       const rowValues = [
         datePart,
@@ -140,6 +194,11 @@ export async function GET(request: NextRequest) {
       const csvRow = rowValues.map((value) => escapeCsvField(value));
       csvString += csvRow.join(",") + "\r\n";
     }
+
+    await persistExportActivity(
+      "success",
+      `Exported ${feedbackEntries.length} vote rows as ${format.toUpperCase()}`
+    );
 
     if (format === "xlsx") {
       const workbook = XLSX.utils.book_new();
@@ -175,6 +234,7 @@ export async function GET(request: NextRequest) {
       headers: responseHeaders,
     });
   } catch (error) {
+    console.error("Failed to export votes", error);
     return NextResponse.json(
       {
         success: false,

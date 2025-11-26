@@ -8,6 +8,7 @@ type UserLike = {
   username: string;
   user?: string | null;
   godmode?: boolean | null;
+  admin?: boolean | null;
   createdAt?: Date;
   updatedAt?: Date;
 };
@@ -17,6 +18,7 @@ const toUserPayload = (doc: UserLike) => ({
   username: doc.username,
   user: doc.user ?? doc.username,
   godmode: Boolean(doc.godmode),
+  admin: Boolean(doc.admin),
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt,
 });
@@ -29,6 +31,7 @@ export async function POST(request: Request) {
       password,
       user: accountAlias,
       godmode,
+      admin,
     } = await request.json();
 
     if (!username || !password) {
@@ -46,6 +49,7 @@ export async function POST(request: Request) {
       ? aliasInput.toLowerCase()
       : normalizedUsername;
     const isGodmode = Boolean(godmode);
+    const isAdmin = Boolean(admin);
 
     const existingUser = await User.findOne({
       username: normalizedUsername,
@@ -85,6 +89,7 @@ export async function POST(request: Request) {
 
       existingUser.user = normalizedAccountAlias;
       existingUser.godmode = isGodmode;
+      existingUser.admin = isAdmin;
 
       await existingUser.save();
 
@@ -105,6 +110,7 @@ export async function POST(request: Request) {
           username: existingUser.user || existingUser.username,
           login: existingUser.username,
           godmode: existingUser.godmode ?? false,
+          admin: existingUser.admin ?? false,
         },
         jwtSecret,
         {
@@ -128,6 +134,7 @@ export async function POST(request: Request) {
       user: normalizedAccountAlias,
       password: password,
       godmode: isGodmode,
+      admin: isAdmin,
     });
 
     await newUser.save();
@@ -149,6 +156,7 @@ export async function POST(request: Request) {
         username: newUser.user || newUser.username,
         login: newUser.username,
         godmode: newUser.godmode ?? false,
+      admin: newUser.admin ?? false,
       },
       jwtSecret,
       {

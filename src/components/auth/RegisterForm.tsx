@@ -37,7 +37,7 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
         success: boolean;
         token: string;
         message?: string;
-        user?: any;
+        user?: Record<string, unknown>;
       }>("/user", {
         method: "POST",
         body: {
@@ -51,19 +51,10 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
       if (response.success && response.token) {
         login(response.token);
         toast.success("Регистрацията е успешна! Пренасочване...");
-        let redirectTo = "/dashboard";
-        try {
-          const decoded = JSON.parse(atob(response.token.split(".")[1]));
-          if (decoded?.godmode) {
-            redirectTo = "/dashboard?godmode=true";
-          }
-        } catch (parseError) {
-          console.error("Failed to decode token", parseError);
-        }
         if (onSuccess) {
           onSuccess();
         } else {
-          router.push(redirectTo);
+          router.push("/dashboard");
         }
       } else {
         const message =

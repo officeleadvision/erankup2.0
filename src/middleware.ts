@@ -129,6 +129,15 @@ export async function middleware(request: NextRequest) {
           const isGodmode =
             payloadObject.godmode === true || payloadObject.godmode === "true";
           requestHeaders.set("x-user-godmode", isGodmode ? "true" : "false");
+        } else {
+          requestHeaders.set("x-user-godmode", "false");
+        }
+        if (typeof payloadObject.admin !== "undefined") {
+          const isAdmin =
+            payloadObject.admin === true || payloadObject.admin === "true";
+          requestHeaders.set("x-user-admin", isAdmin ? "true" : "false");
+        } else {
+          requestHeaders.set("x-user-admin", "false");
         }
       }
       return NextResponse.next({ request: { headers: requestHeaders } });
