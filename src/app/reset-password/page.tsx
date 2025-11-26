@@ -1,10 +1,10 @@
 "use client";
 
-import React, { FormEvent, useState } from "react";
+import React, { FormEvent, Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 
-export default function ResetPasswordPage() {
+function ResetPasswordContent() {
   const searchParams = useSearchParams();
   const token = searchParams.get("token") || "";
 
@@ -152,6 +152,23 @@ export default function ResetPasswordPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function ResetPasswordPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-100 via-white to-slate-100 px-4 py-10">
+          <div className="w-full max-w-md bg-white rounded-3xl shadow-2xl ring-1 ring-indigo-50 p-8 text-center space-y-4">
+            <div className="h-12 w-12 mx-auto rounded-full border-4 border-indigo-100 border-t-indigo-500 animate-spin" />
+            <p className="text-sm text-slate-500">Зареждане на страницата...</p>
+          </div>
+        </div>
+      }
+    >
+      <ResetPasswordContent />
+    </Suspense>
   );
 }
 
