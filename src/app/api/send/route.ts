@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from "next/server";
 import { Resend } from "resend";
-import { EmailTemplate } from "@/components/email-template";
+import { SampleEmailTemplate } from "@/components/email-template";
 
 const resend = process.env.RESEND_API_KEY
   ? new Resend(process.env.RESEND_API_KEY)
@@ -28,22 +28,13 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const emailContent = SampleEmailTemplate({ name });
+
     const data = await resend.emails.send({
       from: "LeadVision Support <support@leadvision.bg>",
       to,
       subject: "Примерен имейл от erankup1",
-      react: (
-        <EmailTemplate
-          headline="Здравейте!"
-          intro="Това е примерен имейл, изпратен чрез Resend и React."
-        >
-          <p>Съобщение до {name || "потребител"}.</p>
-          <p>
-            Можете да използвате този endpoint, за да проверите дали Resend е
-            конфигуриран правилно.
-          </p>
-        </EmailTemplate>
-      ),
+      react: emailContent,
     });
 
     return NextResponse.json({ success: true, data }, { status: 200 });

@@ -196,3 +196,23 @@ export function PasswordResetEmailTemplate({
   );
 }
 
+export interface SampleEmailTemplateProps {
+  name?: string;
+}
+
+export function SampleEmailTemplate({ name }: SampleEmailTemplateProps) {
+  const recipient = name || "потребител";
+  return (
+    <EmailTemplate
+      headline="Здравейте!"
+      intro="Това е примерен имейл, изпратен чрез Resend и React."
+    >
+      <p>Съобщение до {recipient}.</p>
+      <p>
+        Можете да използвате този endpoint, за да проверите дали Resend е
+        конфигуриран правилно.
+      </p>
+    </EmailTemplate>
+  );
+}
+
