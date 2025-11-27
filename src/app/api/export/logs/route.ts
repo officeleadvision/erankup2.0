@@ -33,8 +33,12 @@ export async function GET(request: NextRequest) {
     }
 
     const scope: Scope = isAdmin ? "global" : "account";
-    const query: Record<string, unknown> =
-      scope === "global" ? {} : { account: accountUsername };
+    const query: Record<string, unknown> = {};
+
+    if (scope === "account" && accountUsername) {
+      query.account = accountUsername;
+      query.entityType = { $ne: "user" };
+    }
 
     if (searchTerm) {
       const escaped = searchTerm.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
@@ -104,7 +108,7 @@ export async function GET(request: NextRequest) {
       note:
         scope === "global"
           ? "Като администратор виждате всички действия с устройства, въпроси, експорти и потребители за всеки акаунт."
-          : "Всички експорти, промени на устройства, въпроси и потребители за този акаунт.",
+          : "Всички експорти, промени на устройства и въпроси за този акаунт. Потребителските действия са достъпни само за администратори.",
     });
   } catch (error) {
     console.error("Failed to load export logs", error);

@@ -55,7 +55,7 @@ const formatDateTime = (value?: string) => {
 
 function UsersPageContent() {
   const { token, admin, godmode, username, loginUsername } = useAuth();
-  const canManageUsers = Boolean(token && (admin || godmode));
+  const canManageUsers = Boolean(token && admin);
   const canManageGodmode = Boolean(godmode);
   const currentLogin = loginUsername?.toLowerCase() ?? null;
 

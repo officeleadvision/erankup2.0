@@ -61,14 +61,25 @@ export function EmailTemplate({
 }: BaseTemplateProps) {
   return (
     <div style={baseWrapperStyle}>
-      <table style={cardStyle} cellPadding={0} cellSpacing={0} role="presentation">
+      <table
+        style={cardStyle}
+        cellPadding={0}
+        cellSpacing={0}
+        role="presentation"
+      >
         <tbody>
           <tr>
             <td style={headerStyle}>
               <h1 style={{ margin: 0, fontSize: "26px", fontWeight: 700 }}>
                 {headline}
               </h1>
-              <p style={{ margin: "10px 0 0", color: "#e0e7ff", fontSize: "15px" }}>
+              <p
+                style={{
+                  margin: "10px 0 0",
+                  color: "#e0e7ff",
+                  fontSize: "15px",
+                }}
+              >
                 {intro}
               </p>
             </td>
@@ -78,7 +89,10 @@ export function EmailTemplate({
           </tr>
           <tr>
             <td style={footerStyle}>
-              {footerNote || "© " + new Date().getFullYear() + " LeadVision. Всички права запазени."}
+              {footerNote ||
+                "© " +
+                  new Date().getFullYear() +
+                  " Lead Me. Всички права запазени."}
             </td>
           </tr>
         </tbody>
@@ -100,14 +114,14 @@ export function NewUserEmailTemplate({
 }: NewUserTemplateProps) {
   return (
     <EmailTemplate
-      headline="Добре дошли в erankup1"
+      headline="Добре дошли в eRankUp by Lead Me"
       intro="Акаунтът ви беше активиран успешно."
     >
       <p>Здравейте,</p>
       <p>
-        Създадохме нов достъп за вас в платформата <strong>erankup1</strong>.
-        Използвайте данните по-долу, за да влезете. Можете да смените паролата си
-        след първото влизане от профилната страница.
+        Създадохме нов достъп за вас в платформата <strong>eRankUp</strong>.
+        Използвайте данните по-долу, за да влезете. Можете да смените паролата
+        си след първото влизане от профилната страница.
       </p>
 
       <div
@@ -135,7 +149,7 @@ export function NewUserEmailTemplate({
             background: "#4f46e5",
           }}
         >
-          Вход в erankup1
+          Вход в eRankUp
         </a>
       </div>
 
@@ -161,7 +175,8 @@ export function PasswordResetEmailTemplate({
       <p>Здравейте,</p>
       <p>
         За да зададете нова парола, натиснете бутона по-долу. Връзката е активна
-        60 минути. Ако не сте заявили смяна на парола, игнорирайте това съобщение.
+        60 минути. Ако не сте заявили смяна на парола, игнорирайте това
+        съобщение.
       </p>
 
       <div style={{ textAlign: "center", margin: "28px 0" }}>
@@ -215,4 +230,3 @@ export function SampleEmailTemplate({ name }: SampleEmailTemplateProps) {
     </EmailTemplate>
   );
 }
-

@@ -63,10 +63,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
 
   const visibleNavigation = useMemo(
     () =>
-      navigation.filter((item) =>
-        item.requiresAdmin ? admin || godmode : true
-      ),
-    [admin, godmode]
+      navigation.filter((item) => (item.requiresAdmin ? admin : true)),
+    [admin]
   );
 
   useEffect(() => {

@@ -31,9 +31,9 @@ export async function POST(request: NextRequest) {
     const emailContent = SampleEmailTemplate({ name });
 
     const data = await resend.emails.send({
-      from: "LeadVision Support <support@leadvision.bg>",
+      from: "Lead Me Support <support@leadme.bg>",
       to,
-      subject: "Примерен имейл от erankup1",
+      subject: "Примерен имейл от eRankUp",
       react: emailContent,
     });
 
@@ -44,4 +44,3 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ success: false, message }, { status: 500 });
   }
 }
-

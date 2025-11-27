@@ -57,7 +57,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const isAdmin = Boolean(requester.admin);
     const isGodmode = Boolean(requester.godmode);
 
-    if (!isAdmin && !isGodmode) {
+    if (!isAdmin) {
       return NextResponse.json(
         { success: false, message: "Administrator permissions required." },
         { status: 403 }

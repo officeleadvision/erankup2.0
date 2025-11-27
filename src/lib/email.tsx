@@ -7,7 +7,7 @@ import {
 } from "@/components/email-template";
 
 const RESEND_API_KEY = process.env.RESEND_API_KEY;
-const FROM_EMAIL = "LeadVision Support <support@leadvision.bg>";
+const FROM_EMAIL = "Lead Me Support <support@leadme.bg>";
 
 const resendClient = RESEND_API_KEY ? new Resend(RESEND_API_KEY) : null;
 
@@ -60,7 +60,7 @@ export const sendNewUserEmail = async ({
 
   return sendEmail({
     to,
-    subject: "Вашият достъп до erankup1",
+    subject: "Вашият достъп до eRankUp",
     react,
   });
 };
@@ -80,7 +80,7 @@ export const sendPasswordResetEmail = async ({
 
   return sendEmail({
     to,
-    subject: "Връзка за смяна на парола в erankup1",
+    subject: "Връзка за смяна на парола в eRankUp",
     react,
   });
 };
