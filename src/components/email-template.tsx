@@ -102,12 +102,14 @@ export function EmailTemplate({
 }
 
 export interface NewUserTemplateProps {
+  email: string;
   accountName: string;
   password: string;
   loginUrl: string;
 }
 
 export function NewUserEmailTemplate({
+  email,
   accountName,
   password,
   loginUrl,
@@ -135,6 +137,9 @@ export function NewUserEmailTemplate({
       >
         <p style={{ margin: "0 0 8px", fontWeight: 600 }}>
           Акаунт: <span style={{ fontWeight: 400 }}>{accountName}</span>
+        </p>
+        <p style={{ margin: "0 0 8px", fontWeight: 600 }}>
+          Потребителско име: <span style={{ fontWeight: 400 }}>{email}</span>
         </p>
         <p style={{ margin: 0, fontWeight: 600 }}>
           Временна парола: <span style={{ fontWeight: 400 }}>{password}</span>
