@@ -5,7 +5,10 @@ import { Types } from "mongoose";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
-type RequesterShape = Pick<IUser, "user" | "username" | "admin" | "godmode"> & {
+type RequesterShape = Pick<
+  IUser,
+  "user" | "username" | "admin" | "moderator"
+> & {
   _id: Types.ObjectId;
 };
 

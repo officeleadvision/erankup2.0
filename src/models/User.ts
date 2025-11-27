@@ -4,7 +4,7 @@ import bcrypt from "bcryptjs";
 export interface IUser extends Document {
   username: string;
   user?: string;
-  godmode?: boolean;
+  moderator?: boolean;
   admin?: boolean;
   blocked?: boolean;
   password?: string;
@@ -18,7 +18,7 @@ const UserSchema: Schema<IUser> = new Schema(
     username: { type: String, lowercase: true, required: true, unique: true },
     user: { type: String, lowercase: true, index: true },
     password: { type: String, required: true, select: false },
-    godmode: { type: Boolean, default: false },
+    moderator: { type: Boolean, default: false },
     admin: { type: Boolean, default: false },
     blocked: { type: Boolean, default: false, required: true },
   },

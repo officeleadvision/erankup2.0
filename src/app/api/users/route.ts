@@ -7,14 +7,14 @@ import User, { type IUser } from "@/models/User";
 import { resolveRequester, extractAccountAlias } from "@/lib/requester";
 import { sendNewUserEmail } from "@/lib/email";
 import { logActivity } from "@/lib/activityLogger";
-import { ensureBlockedField } from "@/lib/userMaintenance";
+import { ensureBlockedField, ensureModeratorField } from "@/lib/userMaintenance";
 
 type ManagedUser = {
   id: string;
   username: string;
   account: string;
   admin: boolean;
-  godmode: boolean;
+  moderator: boolean;
   blocked: boolean;
   createdAt?: Date;
   updatedAt?: Date;
@@ -37,7 +37,7 @@ const toManagedUser = (user: IUser): ManagedUser => ({
   username: user.username,
   account: user.user || user.username,
   admin: Boolean(user.admin),
-  godmode: Boolean(user.godmode),
+  moderator: Boolean(user.moderator),
   blocked: Boolean(user.blocked),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -47,6 +47,7 @@ export async function GET(request: NextRequest) {
   try {
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
 
     const requesterResult = await resolveRequester(request);
     if (!requesterResult.success) {
@@ -55,7 +56,7 @@ export async function GET(request: NextRequest) {
     const requester = requesterResult.requester;
 
     const isAdmin = Boolean(requester.admin);
-    const isGodmode = Boolean(requester.godmode);
+    const isModerator = Boolean(requester.moderator);
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -70,7 +71,7 @@ export async function GET(request: NextRequest) {
 
     const query: Record<string, unknown> = {};
 
-    if (!isGodmode && normalizedAccountAlias) {
+    if (!isModerator && normalizedAccountAlias) {
       query.user = normalizedAccountAlias;
     }
 
@@ -104,6 +105,7 @@ export async function POST(request: NextRequest) {
   try {
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
 
     const requesterResult = await resolveRequester(request);
     if (!requesterResult.success) {
@@ -112,7 +114,7 @@ export async function POST(request: NextRequest) {
     const requester = requesterResult.requester;
 
     const isAdmin = Boolean(requester.admin);
-    const isGodmode = Boolean(requester.godmode);
+    const isModerator = Boolean(requester.moderator);
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -124,7 +126,7 @@ export async function POST(request: NextRequest) {
     const normalizedRequesterAlias = extractAccountAlias(requester);
     const performedBy = requester.user || requester.username;
 
-    const { username, accountAlias, admin, godmode } = await request.json();
+    const { username, accountAlias, admin, moderator } = await request.json();
 
     if (!username || typeof username !== "string") {
       return NextResponse.json(
@@ -139,7 +141,7 @@ export async function POST(request: NextRequest) {
         ? accountAlias.trim().toLowerCase()
         : normalizedUsername;
 
-    if (!isGodmode) {
+    if (!isModerator) {
       normalizedAlias = normalizedRequesterAlias;
     }
 
@@ -158,7 +160,7 @@ export async function POST(request: NextRequest) {
       user: normalizedAlias,
       password: tempPassword,
       admin: Boolean(admin),
-      godmode: isGodmode ? Boolean(godmode) : false,
+      moderator: isModerator ? Boolean(moderator) : false,
       blocked: false,
     });
 
@@ -184,7 +186,7 @@ export async function POST(request: NextRequest) {
       message: `Създаден нов потребител`,
       metadata: {
         admin: Boolean(admin),
-        godmode: isGodmode ? Boolean(godmode) : false,
+        moderator: isModerator ? Boolean(moderator) : false,
         emailSent,
       },
     });

@@ -6,7 +6,7 @@ import User, { type IUser } from "@/models/User";
 import { Types } from "mongoose";
 import { resolveRequester, extractAccountAlias } from "@/lib/requester";
 import { logActivity } from "@/lib/activityLogger";
-import { ensureBlockedField } from "@/lib/userMaintenance";
+import { ensureBlockedField, ensureModeratorField } from "@/lib/userMaintenance";
 
 type RouteParams = {
   id: string;
@@ -21,7 +21,7 @@ const toManagedUser = (user: IUser) => ({
   username: user.username,
   account: user.user || user.username,
   admin: Boolean(user.admin),
-  godmode: Boolean(user.godmode),
+  moderator: Boolean(user.moderator),
   blocked: Boolean(user.blocked),
   createdAt: user.createdAt,
   updatedAt: user.updatedAt,
@@ -31,6 +31,8 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   try {
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
+    await ensureModeratorField();
 
     const params = await context.params;
     const userId = params.id;
@@ -49,7 +51,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     const requester = requesterResult.requester;
 
     const isAdmin = Boolean(requester.admin);
-    const isGodmode = Boolean(requester.godmode);
+    const isModerator = Boolean(requester.moderator);
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -62,7 +64,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
 
     let payload: Partial<{
       admin: boolean;
-      godmode: boolean;
+      moderator: boolean;
       user: string;
       password: string;
       blocked: boolean;
@@ -93,7 +95,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!isGodmode && normalizedAccountAlias) {
+    if (!isModerator && normalizedAccountAlias) {
       const targetAccount = (targetUser.user || targetUser.username || "")
         .toString()
         .toLowerCase();
@@ -108,11 +110,11 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser.godmode && !isGodmode) {
+    if (targetUser.moderator && !isModerator) {
       return NextResponse.json(
         {
           success: false,
-          message: "Само God Mode акаунт може да управлява God Mode потребители.",
+          message: "Само Moderator акаунт може да управлява Moderator потребители.",
         },
         { status: 403 }
       );
@@ -134,20 +136,23 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     if (
-      typeof payload.godmode === "boolean" &&
-      targetUser.godmode !== payload.godmode
+      typeof payload.moderator === "boolean" &&
+      targetUser.moderator !== payload.moderator
     ) {
-      if (!isGodmode) {
+      if (!isModerator) {
         return NextResponse.json(
           {
             success: false,
-            message: "Само God Mode акаунт може да променя този флаг.",
+            message: "Само Moderator акаунт може да променя този флаг.",
           },
           { status: 403 }
         );
       }
-      changeSet.godmode = { from: targetUser.godmode, to: payload.godmode };
-      targetUser.godmode = payload.godmode;
+      changeSet.moderator = {
+        from: targetUser.moderator,
+        to: payload.moderator,
+      };
+      targetUser.moderator = payload.moderator;
       hasChanges = true;
     }
 
@@ -248,6 +253,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
   try {
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
 
     const params = await context.params;
     const userId = params.id;
@@ -266,7 +272,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
     const requester = requesterResult.requester;
 
     const isAdmin = Boolean(requester.admin);
-    const isGodmode = Boolean(requester.godmode);
+    const isModerator = Boolean(requester.moderator);
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -286,7 +292,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!isGodmode) {
+    if (!isModerator) {
       const targetAccount = extractAccountAlias(targetUser);
       if (targetAccount !== normalizedAccountAlias) {
         return NextResponse.json(
@@ -299,11 +305,11 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser.godmode && !isGodmode) {
+    if (targetUser.moderator && !isModerator) {
       return NextResponse.json(
         {
           success: false,
-          message: "Само God Mode акаунт може да управлява God Mode потребители.",
+          message: "Само Moderator акаунт може да управлява Moderator потребители.",
         },
         { status: 403 }
       );

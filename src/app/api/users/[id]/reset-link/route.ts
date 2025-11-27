@@ -7,7 +7,7 @@ import { Types } from "mongoose";
 import jwt from "jsonwebtoken";
 import { resolveRequester, extractAccountAlias } from "@/lib/requester";
 import { sendPasswordResetEmail } from "@/lib/email";
-import { ensureBlockedField } from "@/lib/userMaintenance";
+import { ensureBlockedField, ensureModeratorField } from "@/lib/userMaintenance";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -38,6 +38,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
 
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
 
     const params = await context.params;
     const targetUserId = params.id;
@@ -55,7 +56,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
     const requester = requesterResult.requester;
 
     const isAdmin = Boolean(requester.admin);
-    const isGodmode = Boolean(requester.godmode);
+    const isModerator = Boolean(requester.moderator);
 
     if (!isAdmin) {
       return NextResponse.json(
@@ -75,7 +76,7 @@ export async function POST(request: NextRequest, context: RouteContext) {
       );
     }
 
-    if (!isGodmode) {
+    if (!isModerator) {
       const targetAlias = extractAccountAlias(targetUser);
       if (targetAlias !== normalizedAccountAlias) {
         return NextResponse.json(
@@ -88,12 +89,12 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser.godmode && !isGodmode) {
+    if (targetUser.moderator && !isModerator) {
       return NextResponse.json(
         {
           success: false,
           message:
-            "Само God Mode акаунт може да управлява God Mode потребители.",
+            "Само Moderator акаунт може да управлява Moderator потребители.",
         },
         { status: 403 }
       );

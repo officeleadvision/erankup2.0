@@ -30,7 +30,7 @@ type ManagedUser = {
   username: string;
   account: string;
   admin: boolean;
-  godmode: boolean;
+  moderator: boolean;
   blocked: boolean;
   createdAt?: string;
   updatedAt?: string;
@@ -54,9 +54,9 @@ const formatDateTime = (value?: string) => {
 };
 
 function UsersPageContent() {
-  const { token, admin, godmode, username, loginUsername } = useAuth();
+  const { token, admin, moderator, username, loginUsername } = useAuth();
   const canManageUsers = Boolean(token && admin);
-  const canManageGodmode = Boolean(godmode);
+  const canManageModerator = Boolean(moderator);
   const currentLogin = loginUsername?.toLowerCase() ?? null;
 
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -70,7 +70,7 @@ function UsersPageContent() {
   const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserAlias, setNewUserAlias] = useState("");
   const [newUserAdmin, setNewUserAdmin] = useState(false);
-  const [newUserGodmode, setNewUserGodmode] = useState(false);
+  const [newUserModerator, setNewUserModerator] = useState(false);
   const [isCreatingUser, setIsCreatingUser] = useState(false);
 
   const accountAlias = useMemo(() => username ?? "", [username]);
@@ -144,14 +144,14 @@ function UsersPageContent() {
 
   const handleToggleRole = async (
     user: ManagedUser,
-    field: "admin" | "godmode"
+    field: "admin" | "moderator"
   ) => {
-    if (field === "godmode" && !canManageGodmode) {
-      toast.warn("Само God Mode акаунт може да променя този флаг.");
+    if (field === "moderator" && !canManageModerator) {
+      toast.warn("Само Moderator акаунт може да променя този флаг.");
       return;
     }
-    if (user.godmode && !canManageGodmode) {
-      toast.warn("Само God Mode акаунт може да управлява този потребител.");
+    if (user.moderator && !canManageModerator) {
+      toast.warn("Само Moderator акаунт може да управлява този потребител.");
       return;
     }
     if (!token) return;
@@ -181,8 +181,8 @@ function UsersPageContent() {
               response.user.admin ? "вече е" : "вече не е"
             } администратор.`
           : `${user.username} ${
-              response.user.godmode ? "има" : "няма"
-            } активиран God Mode.`
+              response.user.moderator ? "има" : "няма"
+            } активиран Moderator.`
       );
     } catch (err) {
       const message =
@@ -197,8 +197,8 @@ function UsersPageContent() {
 
   const handleResetPassword = async (user: ManagedUser) => {
     if (!token) return;
-    if (user.godmode && !canManageGodmode) {
-      toast.warn("Само God Mode акаунт може да управлява този потребител.");
+    if (user.moderator && !canManageModerator) {
+      toast.warn("Само Moderator акаунт може да управлява този потребител.");
       return;
     }
 
@@ -235,8 +235,8 @@ function UsersPageContent() {
 
   const handleToggleBlocked = async (user: ManagedUser) => {
     if (!token) return;
-    if (user.godmode && !canManageGodmode) {
-      toast.warn("Само God Mode акаунт може да управлява този потребител.");
+    if (user.moderator && !canManageModerator) {
+      toast.warn("Само Moderator акаунт може да управлява този потребител.");
       return;
     }
     if (currentLogin && user.username.toLowerCase() === currentLogin) {
@@ -280,8 +280,8 @@ function UsersPageContent() {
 
   const handleDeleteUser = async (user: ManagedUser) => {
     if (!token) return;
-    if (user.godmode && !canManageGodmode) {
-      toast.warn("Само God Mode акаунт може да управлява този потребител.");
+    if (user.moderator && !canManageModerator) {
+      toast.warn("Само Moderator акаунт може да управлява този потребител.");
       return;
     }
     if (currentLogin && user.username.toLowerCase() === currentLogin) {
@@ -324,7 +324,7 @@ function UsersPageContent() {
     setNewUserEmail("");
     setNewUserAlias(accountAlias);
     setNewUserAdmin(false);
-    setNewUserGodmode(false);
+    setNewUserModerator(false);
     setIsCreateModalOpen(true);
   };
 
@@ -354,7 +354,7 @@ function UsersPageContent() {
           username: trimmedEmail,
           accountAlias: newUserAlias.trim().toLowerCase(),
           admin: newUserAdmin,
-          godmode: canManageGodmode ? newUserGodmode : false,
+          moderator: canManageModerator ? newUserModerator : false,
         },
       });
 
@@ -446,9 +446,9 @@ function UsersPageContent() {
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 p-4">
-            <p className="text-xs uppercase text-slate-500">God Mode</p>
+            <p className="text-xs uppercase text-slate-500">Moderator</p>
             <p className="text-2xl font-semibold text-slate-900">
-              {users.filter((user) => user.godmode).length}
+              {users.filter((user) => user.moderator).length}
             </p>
           </div>
           <div className="rounded-xl border border-slate-200 p-4">
@@ -523,7 +523,7 @@ function UsersPageContent() {
                   const isSelfUser =
                     currentLogin &&
                     user.username.toLowerCase() === currentLogin;
-                  const canManageTarget = canManageGodmode || !user.godmode;
+                  const canManageTarget = canManageModerator || !user.moderator;
                   const dangerDisabled =
                     Boolean(isSelfUser) || isBusy || !canManageTarget;
                   return (
@@ -554,12 +554,12 @@ function UsersPageContent() {
                         </span>
                         <span
                           className={`ml-2 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
-                            user.godmode
+                            user.moderator
                               ? "bg-purple-100 text-purple-700"
                               : "bg-slate-100 text-slate-600"
                           }`}
                         >
-                          God Mode
+                          Moderator
                         </span>
                         {user.blocked && (
                           <span className="ml-2 inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold bg-rose-100 text-rose-700">
@@ -580,7 +580,7 @@ function UsersPageContent() {
                             disabled={isBusy || !canManageTarget}
                             title={
                               !canManageTarget
-                                ? "Само God Mode акаунт може да управлява този потребител."
+                                ? "Само Moderator акаунт може да управлява този потребител."
                                 : undefined
                             }
                             className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -597,16 +597,18 @@ function UsersPageContent() {
                             {user.admin ? "Премахни Админ" : "Направи Админ"}
                           </button>
                           <button
-                            onClick={() => handleToggleRole(user, "godmode")}
+                            onClick={() => handleToggleRole(user, "moderator")}
                             disabled={isBusy}
                             className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
-                              user.godmode
+                              user.moderator
                                 ? "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
                                 : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                             } ${isBusy ? "opacity-60 cursor-not-allowed" : ""}`}
                           >
                             <SparklesIcon className="h-4 w-4 mr-1" />
-                            {user.godmode ? "Изключи God" : "Активирай God"}
+                            {user.moderator
+                              ? "Изключи Moderator"
+                              : "Активирай Moderator"}
                           </button>
                           <button
                             onClick={() => handleResetPassword(user)}
@@ -623,7 +625,7 @@ function UsersPageContent() {
                             disabled={dangerDisabled}
                             title={
                               !canManageTarget
-                                ? "Само God Mode акаунт може да управлява този потребител."
+                                ? "Само Moderator акаунт може да управлява този потребител."
                                 : isSelfUser
                                 ? "Не можете да блокирате собствения си акаунт."
                                 : undefined
@@ -652,7 +654,7 @@ function UsersPageContent() {
                             disabled={dangerDisabled}
                             title={
                               !canManageTarget
-                                ? "Само God Mode акаунт може да управлява този потребител."
+                                ? "Само Moderator акаунт може да управлява този потребител."
                                 : isSelfUser
                                 ? "Не можете да изтриете собствения си акаунт."
                                 : undefined
@@ -706,13 +708,13 @@ function UsersPageContent() {
               type="text"
               value={newUserAlias}
               onChange={(event) => setNewUserAlias(event.target.value)}
-              disabled={!canManageGodmode}
+              disabled={!canManageModerator}
               className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/40 disabled:bg-slate-100 disabled:text-slate-500"
               placeholder="account"
             />
-            {!canManageGodmode && (
+            {!canManageModerator && (
               <p className="text-xs text-slate-500 mt-1">
-                Само God Mode акаунт може да променя общото име на акаунта.
+                Само Moderator акаунт може да променя общото име на акаунта.
               </p>
             )}
           </div>
@@ -733,13 +735,13 @@ function UsersPageContent() {
             <label className="flex items-center gap-3 rounded-2xl border border-slate-200 px-4 py-3 cursor-pointer">
               <input
                 type="checkbox"
-                checked={newUserGodmode}
-                onChange={(event) => setNewUserGodmode(event.target.checked)}
-                disabled={!canManageGodmode}
+                checked={newUserModerator}
+                onChange={(event) => setNewUserModerator(event.target.checked)}
+                disabled={!canManageModerator}
                 className="h-4 w-4 rounded border-slate-300 text-indigo-600 focus:ring-indigo-500 disabled:text-slate-400 disabled:bg-slate-100"
               />
               <span className="text-sm font-medium text-slate-700">
-                God Mode
+                Moderator
               </span>
             </label>
           </div>

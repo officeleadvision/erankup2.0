@@ -17,7 +17,7 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
   const [password, setPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [godmode, setGodmode] = useState(false);
+  const [moderator, setModerator] = useState(false);
   const { login } = useAuth();
   const router = useRouter();
 
@@ -44,7 +44,7 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
           username,
           password,
           user: accountAlias || username,
-          godmode,
+          moderator,
         },
       });
 
@@ -114,8 +114,8 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
           />
         </div>
         <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-          Попълнете, за да споделяте устройства и настройки между няколко потребителя.
-          Оставете празно, за да съвпада с потребителското име.
+          Попълнете, за да споделяте устройства и настройки между няколко
+          потребителя. Оставете празно, за да съвпада с потребителското име.
         </p>
       </div>
 
@@ -143,18 +143,18 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
 
       <div className="flex items-center">
         <input
-          id="godmode"
-          name="godmode"
+          id="moderator"
+          name="moderator"
           type="checkbox"
-          checked={godmode}
-          onChange={(e) => setGodmode(e.target.checked)}
+          checked={moderator}
+          onChange={(e) => setModerator(e.target.checked)}
           className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
         />
         <label
-          htmlFor="godmode"
+          htmlFor="moderator"
           className="ml-2 block text-sm text-gray-700 dark:text-gray-300"
         >
-          Активирай God Mode за този акаунт
+          Активирай Moderator за този акаунт
         </label>
       </div>
 

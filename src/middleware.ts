@@ -127,12 +127,16 @@ export async function middleware(request: NextRequest) {
         if (payloadObject.login) {
           requestHeaders.set("x-user-login", String(payloadObject.login));
         }
-        if (typeof payloadObject.godmode !== "undefined") {
-          const isGodmode =
-            payloadObject.godmode === true || payloadObject.godmode === "true";
-          requestHeaders.set("x-user-godmode", isGodmode ? "true" : "false");
+        if (typeof payloadObject.moderator !== "undefined") {
+          const isModerator =
+            payloadObject.moderator === true ||
+            payloadObject.moderator === "true";
+          requestHeaders.set(
+            "x-user-moderator",
+            isModerator ? "true" : "false"
+          );
         } else {
-          requestHeaders.set("x-user-godmode", "false");
+          requestHeaders.set("x-user-moderator", "false");
         }
         if (typeof payloadObject.admin !== "undefined") {
           const isAdmin =

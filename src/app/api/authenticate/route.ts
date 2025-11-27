@@ -2,12 +2,13 @@ import { NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import User from "@/models/User";
 import jwt from "jsonwebtoken";
-import { ensureBlockedField } from "@/lib/userMaintenance";
+import { ensureBlockedField, ensureModeratorField } from "@/lib/userMaintenance";
 
 export async function POST(request: Request) {
   try {
     await dbConnect();
     await ensureBlockedField();
+    await ensureModeratorField();
     const { username, password } = await request.json();
 
     if (!username || !password) {
@@ -91,7 +92,7 @@ export async function POST(request: Request) {
         userId: authenticatedUser._id,
         username: accountIdentifier,
         login: authenticatedUser.username,
-        godmode: authenticatedUser.godmode ?? false,
+        moderator: authenticatedUser.moderator ?? false,
         admin: authenticatedUser.admin ?? false,
       },
       jwtSecret,

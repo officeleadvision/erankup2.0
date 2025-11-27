@@ -23,7 +23,7 @@ export async function GET(request: NextRequest) {
           username: requester.user || requester.username,
           login: requester.username,
           admin: Boolean(requester.admin),
-          godmode: Boolean(requester.godmode),
+          moderator: Boolean(requester.moderator),
         },
       },
       { status: 200 }

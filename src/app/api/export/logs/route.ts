@@ -19,10 +19,10 @@ export async function GET(request: NextRequest) {
     const limit = Math.min(Math.max(limitRaw, 5), 100);
 
     const accountUsername = request.headers.get("x-user-username");
-    const isGodmode = request.headers.get("x-user-godmode") === "true";
+    const isModerator = request.headers.get("x-user-moderator") === "true";
     const isAdmin = request.headers.get("x-user-admin") === "true";
 
-    if (!accountUsername || (!isGodmode && !isAdmin)) {
+    if (!accountUsername || (!isModerator && !isAdmin)) {
       return NextResponse.json(
         {
           success: false,

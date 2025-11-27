@@ -36,7 +36,7 @@ type ActivityLogResponse = {
 const ITEMS_PER_PAGE = 25;
 
 function LogsPageContent() {
-  const { token, godmode, admin, isLoading: isAuthLoading } = useAuth();
+  const { token, moderator, admin, isLoading: isAuthLoading } = useAuth();
   const [logs, setLogs] = useState<ActivityLogEntry[]>([]);
   const [logScope, setLogScope] = useState<"account" | "global">("account");
   const [logNote, setLogNote] = useState<string | null>(null);
@@ -47,7 +47,7 @@ function LogsPageContent() {
   const [searchTerm, setSearchTerm] = useState("");
   const [appliedSearch, setAppliedSearch] = useState("");
 
-  const canViewLogs = Boolean(token && (godmode || admin));
+  const canViewLogs = Boolean(token && (moderator || admin));
 
   const entityTypeLabels: Record<ActivityEntityType, string> = {
     export: "Експорт",

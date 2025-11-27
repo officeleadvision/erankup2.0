@@ -57,7 +57,7 @@ const navigation: NavigationItem[] = [
 
 export default function DashboardLayout({ children }: DashboardLayoutProps) {
   const pathname = usePathname();
-  const { username, logout, admin, godmode } = useAuth();
+  const { username, logout, admin } = useAuth();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 

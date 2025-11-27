@@ -13,7 +13,7 @@ interface AuthContextType {
   userId: string | null;
   username: string | null;
   loginUsername: string | null;
-  godmode: boolean;
+  moderator: boolean;
   admin: boolean;
   isAuthenticated: boolean;
   isLoading: boolean;
@@ -38,7 +38,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [userId, setUserId] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [loginUsername, setLoginUsername] = useState<string | null>(null);
-  const [godmode, setGodmode] = useState(false);
+  const [moderator, setModerator] = useState(false);
   const [admin, setAdmin] = useState(false);
   const [isLoading, setIsLoading] = useState(true); // Start as true until token is checked
   const [isInitialized, setIsInitialized] = useState(false); // Add state for isInitialized
@@ -53,7 +53,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserId(decodedToken.userId || null);
         setUsername(decodedToken.username || null);
         setLoginUsername(decodedToken.login || null);
-        setGodmode(Boolean(decodedToken.godmode));
+        setModerator(Boolean(decodedToken.moderator));
         setAdmin(Boolean(decodedToken.admin));
       } else {
         localStorage.removeItem("authToken"); // Token expired or invalid
@@ -61,7 +61,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         setUserId(null);
         setUsername(null);
         setLoginUsername(null);
-        setGodmode(false);
+        setModerator(false);
         setAdmin(false);
       }
     } else {
@@ -70,7 +70,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserId(null);
       setUsername(null);
       setLoginUsername(null);
-      setGodmode(false);
+      setModerator(false);
       setAdmin(false);
     }
     setIsLoading(false);
@@ -85,7 +85,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       setUserId(decodedToken.userId || null);
       setUsername(decodedToken.username || null);
       setLoginUsername(decodedToken.login || null);
-      setGodmode(Boolean(decodedToken.godmode));
+      setModerator(Boolean(decodedToken.moderator));
       setAdmin(Boolean(decodedToken.admin));
     } else {
       console.error("Failed to parse token on login");
@@ -99,7 +99,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     setUserId(null);
     setUsername(null);
     setLoginUsername(null);
-    setGodmode(false);
+    setModerator(false);
     setAdmin(false);
   };
 
@@ -110,7 +110,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
         userId,
         username,
         loginUsername,
-        godmode,
+        moderator,
         admin,
         isAuthenticated: !!token,
         isLoading,

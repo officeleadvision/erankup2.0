@@ -31,8 +31,8 @@ const formatDateBG = (dateString: string): string => {
 };
 
 function DevicesPageContent() {
-  const { token, godmode } = useAuth();
-  const isGodMode = Boolean(godmode);
+  const { token, moderator } = useAuth();
+  const isModerator = Boolean(moderator);
   const [devices, setDevices] = useState<Device[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -68,7 +68,7 @@ function DevicesPageContent() {
   }, [fetchDevices]);
 
   const handleAddDeviceClick = () => {
-    if (!isGodMode) {
+    if (!isModerator) {
       toast.warning("Свържете се с вашия администратор");
       return;
     }
@@ -92,7 +92,7 @@ function DevicesPageContent() {
   };
 
   const handleDeleteDeviceClick = (device: Device) => {
-    if (!isGodMode) {
+    if (!isModerator) {
       toast.warning("Свържете се с вашия администратор");
       return;
     }
@@ -141,12 +141,12 @@ function DevicesPageContent() {
         <button
           onClick={handleAddDeviceClick}
           className={`flex items-center ${
-            isGodMode
+            isModerator
               ? "bg-indigo-600 hover:bg-indigo-700"
               : "bg-gray-400 cursor-not-allowed"
           } text-white font-bold py-2 px-4 rounded transition duration-150 ease-in-out`}
           title={
-            isGodMode
+            isModerator
               ? "Добави ново устройство"
               : "Свържете с вашия администратор"
           }
@@ -223,12 +223,14 @@ function DevicesPageContent() {
                     <button
                       onClick={() => handleDeleteDeviceClick(device)}
                       className={`${
-                        isGodMode
+                        isModerator
                           ? "text-red-600 hover:text-red-900 hover:bg-slate-100"
                           : "text-gray-400 cursor-not-allowed"
                       } p-1 rounded-full transition-colors`}
                       title={
-                        isGodMode ? "Изтрий" : "Свържете с вашия администратор"
+                        isModerator
+                          ? "Изтрий"
+                          : "Свържете с вашия администратор"
                       }
                     >
                       <TrashIcon className="h-5 w-5" />

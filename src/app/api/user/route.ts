@@ -7,7 +7,7 @@ type UserLike = {
   _id: unknown;
   username: string;
   user?: string | null;
-  godmode?: boolean | null;
+  moderator?: boolean | null;
   admin?: boolean | null;
   createdAt?: Date;
   updatedAt?: Date;
@@ -17,7 +17,7 @@ const toUserPayload = (doc: UserLike) => ({
   _id: doc._id,
   username: doc.username,
   user: doc.user ?? doc.username,
-  godmode: Boolean(doc.godmode),
+  moderator: Boolean(doc.moderator),
   admin: Boolean(doc.admin),
   createdAt: doc.createdAt,
   updatedAt: doc.updatedAt,
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
       username,
       password,
       user: accountAlias,
-      godmode,
+      moderator,
       admin,
     } = await request.json();
 
@@ -48,7 +48,7 @@ export async function POST(request: Request) {
     const normalizedAccountAlias = aliasProvided
       ? aliasInput.toLowerCase()
       : normalizedUsername;
-    const isGodmode = Boolean(godmode);
+    const isModerator = Boolean(moderator);
     const isAdmin = Boolean(admin);
 
     const existingUser = await User.findOne({
@@ -88,7 +88,7 @@ export async function POST(request: Request) {
       }
 
       existingUser.user = normalizedAccountAlias;
-      existingUser.godmode = isGodmode;
+      existingUser.moderator = isModerator;
       existingUser.admin = isAdmin;
 
       await existingUser.save();
@@ -109,7 +109,7 @@ export async function POST(request: Request) {
           userId: existingUser._id,
           username: existingUser.user || existingUser.username,
           login: existingUser.username,
-          godmode: existingUser.godmode ?? false,
+          moderator: existingUser.moderator ?? false,
           admin: existingUser.admin ?? false,
         },
         jwtSecret,
@@ -133,7 +133,7 @@ export async function POST(request: Request) {
       username: normalizedUsername,
       user: normalizedAccountAlias,
       password: password,
-      godmode: isGodmode,
+      moderator: isModerator,
       admin: isAdmin,
     });
 
@@ -155,7 +155,7 @@ export async function POST(request: Request) {
         userId: newUser._id,
         username: newUser.user || newUser.username,
         login: newUser.username,
-        godmode: newUser.godmode ?? false,
+        moderator: newUser.moderator ?? false,
       admin: newUser.admin ?? false,
       },
       jwtSecret,

@@ -8,11 +8,13 @@ import { Suspense } from "react";
 
 function RegisterContent() {
   const searchParams = useSearchParams();
-  const isGodMode = searchParams.get("godmode") === "true";
+  const moderatorParam =
+    searchParams.get("moderator") ?? searchParams.get("godmode");
+  const isModeratorAccess = moderatorParam === "true";
 
   return (
     <div className="w-full max-w-md p-8 space-y-6 bg-white/90 dark:bg-slate-800/90 backdrop-blur-sm rounded-2xl shadow-xl ring-1 ring-gray-900/5 dark:ring-white/10">
-      {isGodMode ? (
+      {isModeratorAccess ? (
         <>
           <div className="text-center">
             <h2 className="text-2xl font-bold mb-2 text-indigo-900 dark:text-white">
