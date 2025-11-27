@@ -89,17 +89,6 @@ export async function POST(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser.moderator && !isModerator) {
-      return NextResponse.json(
-        {
-          success: false,
-          message:
-            "Само Moderator акаунт може да управлява Moderator потребители.",
-        },
-        { status: 403 }
-      );
-    }
-
     const resetToken = jwt.sign(
       { userId: targetUser._id.toString(), type: "password_reset" },
       JWT_SECRET,

@@ -110,16 +110,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser.moderator && !isModerator) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Само Moderator акаунт може да управлява Moderator потребители.",
-        },
-        { status: 403 }
-      );
-    }
-
     const requesterId = requester._id.toString();
     const targetId = targetUser._id.toString();
     const isSelf = requesterId === targetId;
@@ -139,15 +129,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
       typeof payload.moderator === "boolean" &&
       targetUser.moderator !== payload.moderator
     ) {
-      if (!isModerator) {
-        return NextResponse.json(
-          {
-            success: false,
-            message: "Само Moderator акаунт може да променя този флаг.",
-          },
-          { status: 403 }
-        );
-      }
       changeSet.moderator = {
         from: targetUser.moderator,
         to: payload.moderator,
@@ -303,16 +284,6 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
           { status: 403 }
         );
       }
-    }
-
-    if (targetUser.moderator && !isModerator) {
-      return NextResponse.json(
-        {
-          success: false,
-          message: "Само Moderator акаунт може да управлява Moderator потребители.",
-        },
-        { status: 403 }
-      );
     }
 
     if (targetUser._id.toString() === requester._id.toString()) {

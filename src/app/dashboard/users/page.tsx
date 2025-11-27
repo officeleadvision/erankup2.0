@@ -56,7 +56,7 @@ const formatDateTime = (value?: string) => {
 function UsersPageContent() {
   const { token, admin, moderator, username, loginUsername } = useAuth();
   const canManageUsers = Boolean(token && admin);
-  const canManageModerator = Boolean(moderator);
+  const canManageModerator = Boolean(admin);
   const currentLogin = loginUsername?.toLowerCase() ?? null;
 
   const [users, setUsers] = useState<ManagedUser[]>([]);
@@ -147,11 +147,11 @@ function UsersPageContent() {
     field: "admin" | "moderator"
   ) => {
     if (field === "moderator" && !canManageModerator) {
-      toast.warn("Само Moderator акаунт може да променя този флаг.");
+      toast.warn("Само Admin акаунт може да променя този флаг.");
       return;
     }
     if (user.moderator && !canManageModerator) {
-      toast.warn("Само Moderator акаунт може да управлява този потребител.");
+      toast.warn("Само Admin акаунт може да управлява този потребител.");
       return;
     }
     if (!token) return;
@@ -198,7 +198,7 @@ function UsersPageContent() {
   const handleResetPassword = async (user: ManagedUser) => {
     if (!token) return;
     if (user.moderator && !canManageModerator) {
-      toast.warn("Само Moderator акаунт може да управлява този потребител.");
+      toast.warn("Само Admin акаунт може да управлява този потребител.");
       return;
     }
 
@@ -236,7 +236,7 @@ function UsersPageContent() {
   const handleToggleBlocked = async (user: ManagedUser) => {
     if (!token) return;
     if (user.moderator && !canManageModerator) {
-      toast.warn("Само Moderator акаунт може да управлява този потребител.");
+      toast.warn("Само Admin акаунт може да управлява този потребител.");
       return;
     }
     if (currentLogin && user.username.toLowerCase() === currentLogin) {
@@ -281,7 +281,7 @@ function UsersPageContent() {
   const handleDeleteUser = async (user: ManagedUser) => {
     if (!token) return;
     if (user.moderator && !canManageModerator) {
-      toast.warn("Само Moderator акаунт може да управлява този потребител.");
+      toast.warn("Само Admin акаунт може да управлява този потребител.");
       return;
     }
     if (currentLogin && user.username.toLowerCase() === currentLogin) {
@@ -580,7 +580,7 @@ function UsersPageContent() {
                             disabled={isBusy || !canManageTarget}
                             title={
                               !canManageTarget
-                                ? "Само Moderator акаунт може да управлява този потребител."
+                                ? "Само Admin акаунт може да управлява този потребител."
                                 : undefined
                             }
                             className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
@@ -598,12 +598,21 @@ function UsersPageContent() {
                           </button>
                           <button
                             onClick={() => handleToggleRole(user, "moderator")}
-                            disabled={isBusy}
+                            disabled={isBusy || !canManageModerator}
+                            title={
+                              !canManageModerator
+                                ? "Само Admin акаунт може да управлява този потребител."
+                                : undefined
+                            }
                             className={`inline-flex items-center rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors ${
                               user.moderator
                                 ? "border-purple-200 bg-purple-50 text-purple-700 hover:bg-purple-100"
                                 : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
-                            } ${isBusy ? "opacity-60 cursor-not-allowed" : ""}`}
+                            } ${
+                              isBusy || !canManageModerator
+                                ? "opacity-60 cursor-not-allowed"
+                                : ""
+                            }`}
                           >
                             <SparklesIcon className="h-4 w-4 mr-1" />
                             {user.moderator
@@ -618,14 +627,14 @@ function UsersPageContent() {
                             }`}
                           >
                             <KeyIcon className="h-4 w-4 mr-1" />
-                            Изпрати линк
+                            Нова парола
                           </button>
                           <button
                             onClick={() => handleToggleBlocked(user)}
                             disabled={dangerDisabled}
                             title={
                               !canManageTarget
-                                ? "Само Moderator акаунт може да управлява този потребител."
+                                ? "Само Admin акаунт може да управлява този потребител."
                                 : isSelfUser
                                 ? "Не можете да блокирате собствения си акаунт."
                                 : undefined
@@ -654,7 +663,7 @@ function UsersPageContent() {
                             disabled={dangerDisabled}
                             title={
                               !canManageTarget
-                                ? "Само Moderator акаунт може да управлява този потребител."
+                                ? "Само Admin акаунт може да управлява този потребител."
                                 : isSelfUser
                                 ? "Не можете да изтриете собствения си акаунт."
                                 : undefined
@@ -714,7 +723,7 @@ function UsersPageContent() {
             />
             {!canManageModerator && (
               <p className="text-xs text-slate-500 mt-1">
-                Само Moderator акаунт може да променя общото име на акаунта.
+                Само Admin акаунт може да променя общото име на акаунта.
               </p>
             )}
           </div>
