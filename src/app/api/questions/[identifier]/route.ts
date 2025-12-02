@@ -9,6 +9,7 @@ import { logActivity } from "@/lib/activityLogger";
 type LeanDevice = {
   label?: string | null;
   location?: string | null;
+  token?: string | null;
 };
 
 interface DecodedToken {
@@ -60,7 +61,7 @@ export async function GET(
     })
       .populate({
         path: "devices",
-        select: "label location",
+        select: "label location token",
         model: Device,
       })
       .sort({ order: 1 })
@@ -75,6 +76,7 @@ export async function GET(
         devices: devicesArray.map((d: LeanDevice) => ({
           label: d.label,
           location: d.location,
+          token: d.token,
         })),
       };
     });
