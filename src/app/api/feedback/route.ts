@@ -56,8 +56,11 @@ export async function POST(request: NextRequest) {
       return new Response("Error: User not found", { status: 404 });
     }
 
-    const canonicalUsername = user.username || user.user || trimmedUsername;
-    const normalizedUsername = canonicalUsername.toLowerCase();
+    const usernameForLinking =
+      user.username?.trim() || user.user?.trim() || trimmedUsername;
+    const usernameForStorage =
+      user.user?.trim() || user.username?.trim() || trimmedUsername;
+    const normalizedUsername = usernameForLinking.toLowerCase();
 
     const device = await Device.findOne({ token: trimmedDeviceToken });
 
@@ -124,7 +127,7 @@ export async function POST(request: NextRequest) {
 
     const newFeedbackDoc: any = {
       question: effectiveQuestion,
-      username: canonicalUsername,
+      username: usernameForStorage,
       devices: [device.toObject()],
       name: feedbackObj.name ? encrypt(feedbackObj.name) : null,
       phone: feedbackObj.phone ? encrypt(feedbackObj.phone) : null,
