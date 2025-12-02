@@ -25,27 +25,41 @@ interface CreateFeedbackRequestBody {
   voteId?: string;
 }
 
+const escapeRegex = (value: string) =>
+  value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const buildCaseInsensitiveExactMatch = (value: string) =>
+  new RegExp(`^${escapeRegex(value)}$`, "i");
+
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
     const feedbackObj: CreateFeedbackRequestBody = await request.json();
 
-    if (!feedbackObj.username || !feedbackObj.devices) {
+    const trimmedUsername = feedbackObj.username?.trim();
+    const trimmedDeviceToken = feedbackObj.devices?.trim();
+
+    if (!trimmedUsername || !trimmedDeviceToken) {
       return new Response("Error: Username and device token are required", {
         status: 400,
       });
     }
 
-    const user = await User.findOne({ username: feedbackObj.username }).select(
-      "username"
-    );
+    const userIdentifierRegex = buildCaseInsensitiveExactMatch(trimmedUsername);
+
+    const user = await User.findOne({
+      $or: [{ username: userIdentifierRegex }, { user: userIdentifierRegex }],
+    }).select("username user");
 
     if (!user) {
       return new Response("Error: User not found", { status: 404 });
     }
 
-    const device = await Device.findOne({ token: feedbackObj.devices });
+    const canonicalUsername = user.username || user.user || trimmedUsername;
+    const normalizedUsername = canonicalUsername.toLowerCase();
+
+    const device = await Device.findOne({ token: trimmedDeviceToken });
 
     if (!device) {
       return new Response("Error: Device not found", { status: 404 });
@@ -54,7 +68,6 @@ export async function POST(request: NextRequest) {
     const db = mongoose.connection;
     const feedbacksCollection = db.collection("feedbacks");
 
-    const normalizedUsername = user.username.toLowerCase();
     const effectiveQuestion =
       feedbackObj.question || "Доволни ли сте от обслужването?";
     let linkedVoteObjectId: mongoose.Types.ObjectId | null = null;
@@ -81,7 +94,8 @@ export async function POST(request: NextRequest) {
           existingVote.username === normalizedUsername &&
           voteDeviceToken === device.token &&
           (!feedbackObj.vote || existingVote.vote === feedbackObj.vote) &&
-          (!feedbackObj.question || existingVote.question === feedbackObj.question)
+          (!feedbackObj.question ||
+            existingVote.question === feedbackObj.question)
         ) {
           linkedVoteObjectId = existingVote._id as mongoose.Types.ObjectId;
         }
@@ -110,7 +124,7 @@ export async function POST(request: NextRequest) {
 
     const newFeedbackDoc: any = {
       question: effectiveQuestion,
-      username: user.username,
+      username: canonicalUsername,
       devices: [device.toObject()],
       name: feedbackObj.name ? encrypt(feedbackObj.name) : null,
       phone: feedbackObj.phone ? encrypt(feedbackObj.phone) : null,
