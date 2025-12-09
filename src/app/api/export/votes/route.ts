@@ -2,14 +2,52 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
+import { decrypt } from "@/lib/cryptoUtils";
 import { logActivity } from "@/lib/activityLogger";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
 
-type PopulatedDevice = {
+type DeviceLike = {
   label?: string | null;
   location?: string | null;
+  token?: string | null;
+};
+
+const voteTranslations: Record<string, string> = {
+  superlike: "Много доволен",
+  like: "Доволен",
+  neutral: "Неутрален",
+  dislike: "Недоволен",
+  superdislike: "Много недоволен",
+};
+
+const translateVote = (vote?: unknown) => {
+  if (!vote || typeof vote !== "string") return "";
+  return voteTranslations[vote] || vote;
+};
+
+const extractDeviceField = (
+  deviceEntry: any,
+  field: "label" | "location" | "token"
+) => {
+  if (!deviceEntry) return undefined;
+  if (deviceEntry[field]) return deviceEntry[field];
+  if (deviceEntry?.device && deviceEntry.device[field])
+    return deviceEntry.device[field];
+  if (deviceEntry?._doc && deviceEntry._doc[field])
+    return deviceEntry._doc[field];
+  return undefined;
+};
+
+const safeDecrypt = (value: unknown) => {
+  if (value === null || typeof value === "undefined") return "";
+  if (typeof value !== "string") return value as any;
+  const decrypted = decrypt(value);
+  if (decrypted === null || decrypted === "[Decryption Error]") {
+    return value;
+  }
+  return decrypted;
 };
 
 function escapeCsvField(field: unknown): string {
@@ -98,8 +136,31 @@ export async function GET(request: NextRequest) {
     }
 
     const feedbackEntries = await Feedback.find(matchQuery)
-      .populate({ path: "devices", model: Device, select: "label location" })
-      .sort({ date: -1 });
+      .populate({
+        path: "devices",
+        model: Device,
+        select: "label location token",
+      })
+      .sort({ date: -1 })
+      .lean({ virtuals: true, getters: true });
+
+    const feedbackIds = feedbackEntries
+      .map((fb: any) => fb?._id)
+      .filter(Boolean)
+      .map((id: any) => String(id));
+
+    const devicesByFeedbackId = new Map<string, any[]>();
+    if (feedbackIds.length > 0) {
+      const feedbackDevices = await Feedback.find({
+        _id: { $in: feedbackIds },
+      })
+        .select("devices")
+        .lean();
+      feedbackDevices.forEach((fd: any) => {
+        if (!fd?._id || !Array.isArray(fd.devices)) return;
+        devicesByFeedbackId.set(String(fd._id), fd.devices);
+      });
+    }
 
     const persistExportActivity = async (
       status: "success" | "error",
@@ -108,7 +169,9 @@ export async function GET(request: NextRequest) {
     ) => {
       try {
         const totalRows =
-          typeof rowsOverride === "number" ? rowsOverride : feedbackEntries.length;
+          typeof rowsOverride === "number"
+            ? rowsOverride
+            : feedbackEntries.length;
         await logActivity({
           account: username,
           performedBy: login,
@@ -168,31 +231,62 @@ export async function GET(request: NextRequest) {
       const datePart = entryDate.toISOString().split("T")[0];
       const timePart = entryDate.toTimeString().split(" ")[0];
 
-      const primaryDevice =
-        entry.devices && entry.devices.length > 0
-          ? (entry.devices[0] as PopulatedDevice)
-          : null;
-      const deviceLabel = primaryDevice?.label ?? "";
-      const deviceLocation = primaryDevice?.location ?? "";
+      const devicesArray = Array.isArray((entry as any).devices)
+        ? (entry as any).devices
+        : (entry as any).devices
+        ? [(entry as any).devices]
+        : [];
 
-      const rowValues = [
-        datePart,
-        timePart,
-        entry.vote,
-        entry.translated_vote,
-        entry.questionsVoteToString,
-        deviceLabel,
-        deviceLocation,
-        entry.username,
-        entry.name,
-        entry.phone,
-        entry.email,
-        entry.comment,
-      ].map((value) => (value === null || typeof value === "undefined" ? "" : value));
+      const storedDevices =
+        entry?._id && devicesByFeedbackId.get(String(entry._id))
+          ? devicesByFeedbackId.get(String(entry._id))
+          : [];
 
-      worksheetData.push(rowValues as Array<string | number>);
-      const csvRow = rowValues.map((value) => escapeCsvField(value));
-      csvString += csvRow.join(",") + "\r\n";
+      const primaryDeviceCandidate =
+        (Array.isArray(storedDevices) && storedDevices[0]) ||
+        (devicesArray.length > 0 ? devicesArray[0] : null);
+
+      const deviceLabel =
+        extractDeviceField(primaryDeviceCandidate, "label") ??
+        entry.device_label ??
+        "";
+      const deviceLocation =
+        extractDeviceField(primaryDeviceCandidate, "location") ??
+        entry.location ??
+        "";
+
+      const questionsList =
+        Array.isArray(entry.questionsVote) && entry.questionsVote.length > 0
+          ? entry.questionsVote
+          : [
+              {
+                question: entry.question,
+                vote: entry.vote,
+              },
+            ];
+
+      questionsList.forEach((q: any) => {
+        const rowValues = [
+          datePart,
+          timePart,
+          q?.vote ?? entry.vote,
+          translateVote(q?.vote ?? entry.vote),
+          `${q?.question || entry.question || "N/A"}`,
+          deviceLabel,
+          deviceLocation,
+          entry.username,
+          safeDecrypt(entry.name),
+          safeDecrypt(entry.phone),
+          safeDecrypt(entry.email),
+          safeDecrypt(entry.comment),
+        ].map((value) =>
+          value === null || typeof value === "undefined" ? "" : value
+        );
+
+        worksheetData.push(rowValues as Array<string | number>);
+        const csvRow = rowValues.map((value) => escapeCsvField(value));
+        csvString += csvRow.join(",") + "\r\n";
+      });
     }
 
     await persistExportActivity(
