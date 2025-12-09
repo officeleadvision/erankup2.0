@@ -21,6 +21,7 @@ interface UnifiedVote {
   voteType: VoteType;
   score: number;
   date: Date;
+  question?: string | null;
 }
 
 interface AggregationFilters {
@@ -37,14 +38,20 @@ interface FeedbackCandidate {
   question?: string | null;
 }
 
+interface FeedbackQuestionVote {
+  question?: string | null;
+  vote?: VoteType | null;
+}
+
 interface FeedbackLean {
   date: Date;
   vote?: VoteType | null;
-  questionsVote?: Array<{ vote?: VoteType | null } | null> | null;
+  questionsVote?: Array<FeedbackQuestionVote | null> | null;
   linkedVoteId?: unknown;
   devices?: Array<Record<string, any>> | null;
   question?: string | null;
   username?: string | null;
+  _id?: unknown;
 }
 
 interface VoteLean {
@@ -73,7 +80,11 @@ const getDeviceTokenFromFeedback = (feedback: FeedbackLean) => {
   const devices = Array.isArray(feedback.devices) ? feedback.devices : [];
   if (devices.length === 0) return undefined;
   const primaryDevice = devices[0];
-  if (primaryDevice && typeof primaryDevice === "object" && "token" in primaryDevice) {
+  if (
+    primaryDevice &&
+    typeof primaryDevice === "object" &&
+    "token" in primaryDevice
+  ) {
     return primaryDevice.token as string | undefined;
   }
   return undefined;
@@ -90,22 +101,25 @@ const getDeviceTokenFromVote = (vote: VoteLean) => {
 const buildDedupeKey = (username?: string | null, token?: string) =>
   `${normalizeUsername(username)}::${token || ""}`;
 
-const extractScoresFromFeedback = (feedback: FeedbackLean): number[] => {
-  const questionVotes = Array.isArray(feedback.questionsVote)
-    ? feedback.questionsVote
-        .map((item) => item?.vote)
-        .filter((vote): vote is VoteType => !!vote && voteScoreMap[vote] !== undefined)
-    : [];
-
-  if (questionVotes.length > 0) {
-    return questionVotes.map((vote) => voteScoreMap[vote]);
+const extractQuestionVoteItemsFromFeedback = (
+  feedback: FeedbackLean
+): Array<{ question?: string | null; vote?: VoteType | null }> => {
+  if (
+    Array.isArray(feedback.questionsVote) &&
+    feedback.questionsVote.length > 0
+  ) {
+    return feedback.questionsVote.map((item) => ({
+      question: item?.question,
+      vote: item?.vote as VoteType | null | undefined,
+    }));
   }
 
-  if (feedback.vote && voteScoreMap[feedback.vote] !== undefined) {
-    return [voteScoreMap[feedback.vote]];
-  }
-
-  return [];
+  return [
+    {
+      question: feedback.question,
+      vote: feedback.vote,
+    },
+  ];
 };
 
 export async function getUnifiedVotes(
@@ -131,48 +145,107 @@ export async function getUnifiedVotes(
     Feedback.find(matchQuery)
       .select("date vote questionsVote linkedVoteId devices question username")
       .sort({ date: 1 })
-      .lean<FeedbackLean>(),
+      .lean<FeedbackLean[]>(),
     Vote.find(matchQuery)
       .select("date vote question device feedbackId username")
       .sort({ date: 1 })
-      .lean<VoteLean>(),
+      .lean<VoteLean[]>(),
   ]);
+
+  const feedbackById = new Map<string, FeedbackLean>();
+  feedbackEntries.forEach((fb) => {
+    if (fb?._id) {
+      feedbackById.set(String(fb._id), fb);
+    }
+  });
 
   const unifiedVotes: UnifiedVote[] = [];
   const dedupeMap = new Map<string, FeedbackCandidate[]>();
 
   feedbackEntries.forEach((feedback) => {
-    const scores = extractScoresFromFeedback(feedback);
-    if (scores.length === 0) {
-      return;
-    }
+    const questionVoteItems = extractQuestionVoteItemsFromFeedback(feedback);
 
-    const averageScore = scores.reduce((sum, value) => sum + value, 0) / scores.length;
-    const derivedVoteType = scoreToVoteType(averageScore);
+    questionVoteItems.forEach((item) => {
+      if (!item.vote || voteScoreMap[item.vote] === undefined) return;
 
-    unifiedVotes.push({
-      voteType: derivedVoteType,
-      score: averageScore,
-      date: feedback.date,
+      const score = voteScoreMap[item.vote as VoteType];
+
+      unifiedVotes.push({
+        voteType: item.vote,
+        score,
+        date: feedback.date,
+        question: item.question ?? feedback.question ?? null,
+      });
+
+      const deviceToken = getDeviceTokenFromFeedback(feedback);
+      const dedupeKey = buildDedupeKey(feedback.username, deviceToken);
+      const existingCandidates = dedupeMap.get(dedupeKey) || [];
+
+      existingCandidates.push({
+        date: feedback.date,
+        voteType: item.vote,
+        averageScore: score,
+        originalVote: (feedback.vote as VoteType | undefined) || undefined,
+        question: item.question ?? feedback.question ?? null,
+      });
+
+      dedupeMap.set(dedupeKey, existingCandidates);
     });
-
-    const deviceToken = getDeviceTokenFromFeedback(feedback);
-    const dedupeKey = buildDedupeKey(feedback.username, deviceToken);
-    const existingCandidates = dedupeMap.get(dedupeKey) || [];
-
-    existingCandidates.push({
-      date: feedback.date,
-      voteType: derivedVoteType,
-      averageScore,
-      originalVote: (feedback.vote as VoteType | undefined) || undefined,
-      question: feedback.question,
-    });
-
-    dedupeMap.set(dedupeKey, existingCandidates);
   });
 
   voteEntries.forEach((vote) => {
+    // If vote is linked to feedback, prefer the feedback's question votes (already handled).
     if (vote.feedbackId) {
+      const feedback = feedbackById.get(String(vote.feedbackId));
+      if (!feedback) {
+        return;
+      }
+      const questionVoteItems = extractQuestionVoteItemsFromFeedback(feedback);
+      questionVoteItems.forEach((item) => {
+        if (!item.vote || voteScoreMap[item.vote] === undefined) return;
+
+        const deviceToken = getDeviceTokenFromVote(vote);
+        const dedupeKey = buildDedupeKey(vote.username, deviceToken);
+        const potentialMatches = dedupeMap.get(dedupeKey) || [];
+
+        const voteScore = voteScoreMap[item.vote];
+        const voteDate = new Date(vote.date);
+
+        const hasDuplicate = potentialMatches.some((candidate) => {
+          const candidateDate = new Date(candidate.date);
+          const timeDiff = Math.abs(
+            candidateDate.getTime() - voteDate.getTime()
+          );
+          if (timeDiff > DUPLICATION_WINDOW_MS) {
+            return false;
+          }
+
+          const questionMatches =
+            !item.question ||
+            !candidate.question ||
+            item.question === candidate.question;
+          if (!questionMatches) {
+            return false;
+          }
+
+          const originalVoteMatches = candidate.originalVote === item.vote;
+          const scoreCloseEnough =
+            Math.abs(candidate.averageScore - voteScore) <= 0.51;
+
+          return originalVoteMatches || scoreCloseEnough;
+        });
+
+        if (hasDuplicate) {
+          return;
+        }
+
+        unifiedVotes.push({
+          voteType: item.vote,
+          score: voteScore,
+          date: vote.date,
+          question: item.question ?? feedback.question ?? null,
+        });
+      });
       return;
     }
 
@@ -191,13 +264,16 @@ export async function getUnifiedVotes(
       }
 
       const questionMatches =
-        !vote.question || !candidate.question || vote.question === candidate.question;
+        !vote.question ||
+        !candidate.question ||
+        vote.question === candidate.question;
       if (!questionMatches) {
         return false;
       }
 
       const originalVoteMatches = candidate.originalVote === vote.vote;
-      const scoreCloseEnough = Math.abs(candidate.averageScore - voteScore) <= 0.51;
+      const scoreCloseEnough =
+        Math.abs(candidate.averageScore - voteScore) <= 0.51;
 
       return originalVoteMatches || scoreCloseEnough;
     });
@@ -210,6 +286,7 @@ export async function getUnifiedVotes(
       voteType: vote.vote,
       score: voteScore,
       date: vote.date,
+      question: vote.question ?? null,
     });
   });
 

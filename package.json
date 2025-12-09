@@ -26,7 +26,7 @@
     "jose": "^6.0.11",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.15.0",
-    "next": "15.3.2",
+    "next": "15.4.8",
     "next-auth": "^4.24.11",
     "rand-token": "^1.0.1",
     "react": "^19.0.0",
@@ -45,7 +45,7 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "15.3.2",
+    "eslint-config-next": "15.4.8",
     "tailwindcss": "^4",
     "typescript": "^5"
   }
