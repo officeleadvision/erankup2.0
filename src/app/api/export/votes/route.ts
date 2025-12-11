@@ -4,6 +4,11 @@ import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
 import { decrypt } from "@/lib/cryptoUtils";
 import { logActivity } from "@/lib/activityLogger";
+import {
+  formatDateInTimezone,
+  parseDateStartOfDayUTC,
+  parseDateEndOfDayUTC,
+} from "@/lib/timezoneUtils";
 import * as XLSX from "xlsx";
 
 export const runtime = "nodejs";
@@ -92,32 +97,24 @@ export async function GET(request: NextRequest) {
 
     const format = requestedFormat as "csv" | "xlsx";
 
-    const startDate =
-      startDateString && startDateString.trim() !== ""
-        ? new Date(startDateString)
-        : null;
-    if (startDate && isNaN(startDate.getTime())) {
+    const timezone = searchParams.get("timezone") || "UTC";
+
+    // Parse dates using utility functions
+    const startDate = parseDateStartOfDayUTC(startDateString);
+    const endDate = parseDateEndOfDayUTC(endDateString);
+
+    // Validate dates if provided
+    if (startDateString && !startDate) {
       return NextResponse.json(
         { success: false, message: "Invalid startDate format." },
         { status: 400 }
       );
     }
-
-    const endDateRaw =
-      endDateString && endDateString.trim() !== ""
-        ? new Date(endDateString)
-        : null;
-    if (endDateRaw && isNaN(endDateRaw.getTime())) {
+    if (endDateString && !endDate) {
       return NextResponse.json(
         { success: false, message: "Invalid endDate format." },
         { status: 400 }
       );
-    }
-
-    const endDate =
-      endDateRaw !== null ? new Date(endDateRaw.getTime()) : endDateRaw;
-    if (endDate) {
-      endDate.setHours(23, 59, 59, 999);
     }
 
     type DateQuery = {
@@ -125,7 +122,9 @@ export async function GET(request: NextRequest) {
       $lte?: Date;
     };
 
-    const matchQuery: { username: string; date?: DateQuery } = { username };
+    const matchQuery: { username: string; date?: DateQuery } = {
+      username: username.toLowerCase(),
+    };
 
     if (startDate) {
       matchQuery.date = { ...(matchQuery.date || {}), $gte: startDate };
@@ -228,8 +227,7 @@ export async function GET(request: NextRequest) {
 
     for (const entry of feedbackEntries) {
       const entryDate = new Date(entry.date);
-      const datePart = entryDate.toISOString().split("T")[0];
-      const timePart = entryDate.toTimeString().split(" ")[0];
+      const { datePart, timePart } = formatDateInTimezone(entryDate, timezone);
 
       const devicesArray = Array.isArray((entry as any).devices)
         ? (entry as any).devices
