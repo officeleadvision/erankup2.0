@@ -172,9 +172,10 @@ function StatsPageContent() {
         newGroupBy = "day";
         break;
       case "month":
+        newStartDate.setFullYear(newStartDate.getFullYear() - 1);
         newStartDate.setDate(1);
         newStartDate.setHours(0, 0, 0, 0);
-        newGroupBy = "day";
+        newGroupBy = "month";
         break;
       case "year":
         newStartDate.setMonth(0, 1);

@@ -47,16 +47,18 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
     const { year, month, day, hour } = point.timePeriod;
 
     if (groupBy === "hour" && day !== undefined && hour !== undefined) {
-      return new Date(year, month - 1, day, hour).toISOString();
+      return new Date(Date.UTC(year, month - 1, day, hour)).toISOString();
     } else if ((groupBy === "day" || groupBy === "week") && day !== undefined) {
-      return new Date(year, month - 1, day).toISOString();
+      return new Date(Date.UTC(year, month - 1, day)).toISOString();
     } else if (groupBy === "month") {
-      return new Date(year, month - 1, 1).toISOString();
+      return new Date(Date.UTC(year, month - 1, 1)).toISOString();
     }
-    return new Date(year, month - 1, day || 1).toISOString();
+    return new Date(Date.UTC(year, month - 1, day || 1)).toISOString();
   });
 
   const dataPoints = timelineData.map((point) => point.totalCount);
+  const maxCount = Math.max(...dataPoints, 0);
+  const yMax = maxCount > 0 ? Math.ceil(maxCount * 1.25) : 10;
 
   const data = {
     labels: labels,
@@ -74,26 +76,27 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
 
   let timeUnit: "day" | "hour" | "month" | "week" = "day";
   let tooltipFmt = "dd.MM.yyyy";
-  let displayFmt = { day: "dd.MM" };
+  let displayFmt: Record<string, string> = { day: "dd.MM" };
 
   switch (groupBy) {
     case "hour":
       timeUnit = "hour";
       tooltipFmt = "dd.MM.yyyy HH:mm";
-      displayFmt = { hour: "HH:mm", ...displayFmt } as any;
+      displayFmt = { hour: "HH:mm", day: "dd.MM" };
       break;
     case "day":
       timeUnit = "day";
+      displayFmt = { day: "dd.MM" };
       break;
     case "week":
       timeUnit = "week";
       tooltipFmt = "dd.MM.yyyy";
-      displayFmt = { week: "dd.MM", ...displayFmt } as any;
+      displayFmt = { week: "dd.MM" };
       break;
     case "month":
       timeUnit = "month";
-      tooltipFmt = "MM.yyyy";
-      displayFmt = { month: "MM.yyyy", ...displayFmt } as any;
+      tooltipFmt = "MMMM yyyy";
+      displayFmt = { month: "MMM yyyy" };
       break;
   }
 
@@ -138,6 +141,7 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
       },
       y: {
         beginAtZero: true,
+        max: yMax,
         title: {
           display: false,
         },

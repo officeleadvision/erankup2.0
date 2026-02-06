@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import { allowedVotes, getUnifiedVotes } from "@/lib/voteAggregation";
+import {
+  parseDateStartOfDayUTC,
+  parseDateEndOfDayUTC,
+} from "@/lib/timezoneUtils";
 
 const describeAverage = (avg: number | null) => {
   if (avg === null) return "N/A";
@@ -31,8 +35,8 @@ export async function GET(request: NextRequest) {
     let endDate: Date | undefined;
 
     if (startDateString && startDateString.trim() !== "") {
-      const parsedStart = new Date(startDateString);
-      if (isNaN(parsedStart.getTime())) {
+      const parsedStart = parseDateStartOfDayUTC(startDateString);
+      if (!parsedStart) {
         return NextResponse.json(
           { success: false, message: "Invalid startDate format." },
           { status: 400 }
@@ -42,14 +46,13 @@ export async function GET(request: NextRequest) {
     }
 
     if (endDateString && endDateString.trim() !== "") {
-      const parsedEnd = new Date(endDateString);
-      if (isNaN(parsedEnd.getTime())) {
+      const parsedEnd = parseDateEndOfDayUTC(endDateString);
+      if (!parsedEnd) {
         return NextResponse.json(
           { success: false, message: "Invalid endDate format." },
           { status: 400 }
         );
       }
-      parsedEnd.setHours(23, 59, 59, 999);
       endDate = parsedEnd;
     }
 
