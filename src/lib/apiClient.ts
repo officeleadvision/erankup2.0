@@ -1,9 +1,18 @@
 interface ApiCallOptions extends Omit<RequestInit, "body"> {
   token?: string | null;
   isFormData?: boolean;
-  body?: Record<string, any> | BodyInit | null;
+  body?: Record<string, unknown> | BodyInit | null;
   responseType?: "json" | "text" | "blob";
 }
+
+const isBodyInit = (body: unknown): body is BodyInit =>
+  typeof body === "string" ||
+  body instanceof Blob ||
+  body instanceof ArrayBuffer ||
+  ArrayBuffer.isView(body) ||
+  body instanceof FormData ||
+  body instanceof URLSearchParams ||
+  (typeof ReadableStream !== "undefined" && body instanceof ReadableStream);
 
 async function apiClient<T>(
   endpoint: string,
@@ -18,23 +27,13 @@ async function apiClient<T>(
   }
 
   if (body) {
-    if (isFormData) {
-      finalBody = body as FormData;
-    } else if (
-      typeof body === "object" &&
-      !(body instanceof Blob) &&
-      !(body instanceof ArrayBuffer) &&
-      !ArrayBuffer.isView(body) &&
-      !(body instanceof FormData) &&
-      !(body instanceof URLSearchParams) &&
-      typeof (body as any).pipe !== "function"
-    ) {
+    if (isFormData || isBodyInit(body)) {
+      finalBody = body as BodyInit;
+    } else {
       if (!headers.has("Content-Type")) {
         headers.append("Content-Type", "application/json");
       }
       finalBody = JSON.stringify(body);
-    } else {
-      finalBody = body as BodyInit;
     }
   }
 
@@ -51,44 +50,36 @@ async function apiClient<T>(
   if (!response.ok) {
     let errorMessage = `API Error: ${response.status} ${response.statusText}`;
     try {
-      const errorData = await response.json();
+      const errorData = (await response.json()) as {
+        message?: string;
+        error?: string;
+      };
       errorMessage = errorData.message || errorData.error || errorMessage;
-    } catch (e) {
-      /* Ignore */
+    } catch {
+      /* non-JSON error body */
     }
     throw new Error(errorMessage);
   }
-
-  const contentType = response.headers.get("content-type");
 
   if (response.status === 204) {
     return undefined as T;
   }
 
   if (responseType === "blob") {
-    return response.blob() as Promise<T>;
+    return (await response.blob()) as T;
   }
 
   if (responseType === "text") {
-    return response.text() as Promise<T>;
+    return (await response.text()) as T;
   }
+
+  const contentType = response.headers.get("content-type");
 
   if (contentType && contentType.includes("application/json")) {
-    return response.json();
+    return (await response.json()) as T;
   }
 
-  if (
-    contentType &&
-    (contentType.includes("text/csv") || contentType.includes("text/plain"))
-  ) {
-    return response.text() as Promise<T>;
-  }
-
-  if (!contentType || !contentType.includes("application/json")) {
-    return response.text() as Promise<T>;
-  }
-
-  return response.json();
+  return (await response.text()) as T;
 }
 
 export default apiClient;

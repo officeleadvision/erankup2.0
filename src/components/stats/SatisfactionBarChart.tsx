@@ -8,10 +8,10 @@ import {
   Title,
   Tooltip,
   Legend,
+  type TooltipItem,
 } from "chart.js";
 import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
 import ChartDataLabels from "chartjs-plugin-datalabels";
-import { VoteType } from "@/models/Vote";
 import Loader from "@/components/ui/Loader";
 
 ChartJS.register(
@@ -53,7 +53,7 @@ const SatisfactionBarChart: React.FC<SatisfactionBarChartProps> = ({
   if (!hasData) {
     return (
       <div className="h-72 md:h-96 flex items-center justify-center">
-        <p className="text-gray-500">Няма данни за стълбовидната диаграма.</p>
+        <p className="text-gray-500">Няма гласували за този период.</p>
       </div>
     );
   }
@@ -117,7 +117,7 @@ const SatisfactionBarChart: React.FC<SatisfactionBarChartProps> = ({
       },
       tooltip: {
         callbacks: {
-          label: function (context: any) {
+          label: function (context: TooltipItem<"bar">) {
             let label = context.dataset.label || "";
             if (label) {
               label += ": ";

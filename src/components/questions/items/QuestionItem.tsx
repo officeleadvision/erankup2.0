@@ -9,7 +9,7 @@ import {
   TrashIcon,
 } from "@heroicons/react/24/outline";
 import { formatDateBG } from "@/lib/formatDateBG";
-import { Question, DeviceReference } from "./SortableQuestionItem"; // Reuse interfaces
+import { Question } from "./SortableQuestionItem";
 
 interface QuestionItemProps {
   question: Question;

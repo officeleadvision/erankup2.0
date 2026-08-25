@@ -1,10 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
-import { allowedVotes, getUnifiedVotes } from "@/lib/voteAggregation";
 import {
-  parseDateStartOfDayUTC,
-  parseDateEndOfDayUTC,
+  allowedVotes,
+  getLastVoteDate,
+  getUnifiedVotes,
+} from "@/lib/voteAggregation";
+import {
+  parseDateStartOfDay,
+  parseDateEndOfDay,
+  resolveTimezone,
 } from "@/lib/timezoneUtils";
+
+export const dynamic = "force-dynamic";
 
 const describeAverage = (avg: number | null) => {
   if (avg === null) return "N/A";
@@ -30,12 +37,13 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDateString = searchParams.get("startDate");
     const endDateString = searchParams.get("endDate");
+    const timezone = resolveTimezone(searchParams.get("timezone"));
 
     let startDate: Date | undefined;
     let endDate: Date | undefined;
 
     if (startDateString && startDateString.trim() !== "") {
-      const parsedStart = parseDateStartOfDayUTC(startDateString);
+      const parsedStart = parseDateStartOfDay(startDateString, timezone);
       if (!parsedStart) {
         return NextResponse.json(
           { success: false, message: "Invalid startDate format." },
@@ -46,7 +54,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (endDateString && endDateString.trim() !== "") {
-      const parsedEnd = parseDateEndOfDayUTC(endDateString);
+      const parsedEnd = parseDateEndOfDay(endDateString, timezone);
       if (!parsedEnd) {
         return NextResponse.json(
           { success: false, message: "Invalid endDate format." },
@@ -56,11 +64,10 @@ export async function GET(request: NextRequest) {
       endDate = parsedEnd;
     }
 
-    const unifiedVotes = await getUnifiedVotes({
-      username,
-      startDate,
-      endDate,
-    });
+    const [unifiedVotes, lastVoteAt] = await Promise.all([
+      getUnifiedVotes({ username, startDate, endDate }),
+      getLastVoteDate(username),
+    ]);
 
     const voteCountsMap = new Map<string, number>();
     allowedVotes.forEach((voteKey) => voteCountsMap.set(voteKey, 0));
@@ -68,9 +75,6 @@ export async function GET(request: NextRequest) {
     let cumulativeScore = 0;
 
     unifiedVotes.forEach(({ voteType, score }) => {
-      if (!allowedVotes.includes(voteType)) {
-        return;
-      }
       const current = voteCountsMap.get(voteType) || 0;
       voteCountsMap.set(voteType, current + 1);
       cumulativeScore += score;
@@ -86,20 +90,19 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       success: true,
+      timezone,
       totalVotes,
+      lastVoteAt,
       votesByType,
       averageScore,
       averageLabel: describeAverage(averageScore),
     });
   } catch (error) {
-    let errorMessage = "Internal server error. Failed to fetch vote summary.";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    console.error("/api/stats/votes/summary", error);
     return NextResponse.json(
       {
         success: false,
-        message: errorMessage,
+        message: "Internal server error. Failed to fetch vote summary.",
       },
       { status: 500 }
     );

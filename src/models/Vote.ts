@@ -20,7 +20,7 @@ export interface IVote extends Document {
   date: Date;
   username?: string;
   location: string; // Now a regular field, not just a virtual
-  device: IDevice | any; // Store the full device object
+  device: IDevice | Record<string, unknown>; // Store the full device object snapshot
   question: string;
   vote_translated?: string; // This will be a virtual
   vote: VoteType;

@@ -1,19 +1,30 @@
 import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
-import { getUnifiedVotes } from "@/lib/voteAggregation";
+import { allowedVotes, getUnifiedVotes } from "@/lib/voteAggregation";
+import type { VoteType } from "@/models/Vote";
 import {
-  parseDateStartOfDayUTC,
-  parseDateEndOfDayUTC,
+  getZonedParts,
+  parseDateStartOfDay,
+  parseDateEndOfDay,
+  resolveTimezone,
+  toDateKey,
 } from "@/lib/timezoneUtils";
 
+export const dynamic = "force-dynamic";
+
+type GroupBy = "day" | "hour" | "month";
+
+/**
+ * Bucket an instant by wall-clock components in the requested timezone, so a
+ * vote cast at 00:30 Sofia time on the 11th lands on the 11th (not the 10th
+ * UTC), and the hourly chart for "today" shows local hours.
+ */
 const buildTimePeriod = (
   date: Date,
-  groupBy: "day" | "hour" | "month"
+  groupBy: GroupBy,
+  timezone: string
 ): Record<string, number> => {
-  const year = date.getUTCFullYear();
-  const month = date.getUTCMonth() + 1;
-  const day = date.getUTCDate();
-  const hour = date.getUTCHours();
+  const { year, month, day, hour } = getZonedParts(date, timezone);
 
   if (groupBy === "hour") {
     return { year, month, day, hour };
@@ -59,14 +70,14 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDateString = searchParams.get("startDate");
     const endDateString = searchParams.get("endDate");
-    const requestedGroupBy =
-      (searchParams.get("groupBy") as "day" | "hour" | "month" | null) || "day";
+    const requestedGroupBy = searchParams.get("groupBy") || "day";
+    const timezone = resolveTimezone(searchParams.get("timezone"));
 
     let startDate: Date | undefined;
     let endDate: Date | undefined;
 
     if (startDateString && startDateString.trim() !== "") {
-      const parsedStart = parseDateStartOfDayUTC(startDateString);
+      const parsedStart = parseDateStartOfDay(startDateString, timezone);
       if (!parsedStart) {
         return NextResponse.json(
           { success: false, message: "Invalid startDate format." },
@@ -77,7 +88,7 @@ export async function GET(request: NextRequest) {
     }
 
     if (endDateString && endDateString.trim() !== "") {
-      const parsedEnd = parseDateEndOfDayUTC(endDateString);
+      const parsedEnd = parseDateEndOfDay(endDateString, timezone);
       if (!parsedEnd) {
         return NextResponse.json(
           { success: false, message: "Invalid endDate format." },
@@ -87,10 +98,11 @@ export async function GET(request: NextRequest) {
       endDate = parsedEnd;
     }
 
-    let effectiveGroupBy: "day" | "hour" | "month" = requestedGroupBy;
-    if (!["day", "hour", "month"].includes(effectiveGroupBy)) {
-      effectiveGroupBy = "day";
-    }
+    const effectiveGroupBy: GroupBy = (
+      ["day", "hour", "month"] as const
+    ).includes(requestedGroupBy as GroupBy)
+      ? (requestedGroupBy as GroupBy)
+      : "day";
 
     if (effectiveGroupBy === "hour") {
       const startReference = startDate ?? endDate;
@@ -99,8 +111,7 @@ export async function GET(request: NextRequest) {
       if (
         !startReference ||
         !endReference ||
-        startReference.toISOString().split("T")[0] !==
-          endReference.toISOString().split("T")[0]
+        toDateKey(startReference, timezone) !== toDateKey(endReference, timezone)
       ) {
         return NextResponse.json(
           {
@@ -119,33 +130,50 @@ export async function GET(request: NextRequest) {
       endDate,
     });
 
+    const emptyByType = () =>
+      Object.fromEntries(allowedVotes.map((v) => [v, 0])) as Record<
+        VoteType,
+        number
+      >;
+
     const timelineMap = new Map<
       string,
-      { timePeriod: Record<string, number>; totalCount: number }
+      {
+        timePeriod: Record<string, number>;
+        totalCount: number;
+        byType: Record<VoteType, number>;
+      }
     >();
 
     unifiedVotes.forEach((entry) => {
-      const voteDate = new Date(entry.date);
-      const timePeriod = buildTimePeriod(voteDate, effectiveGroupBy);
+      const timePeriod = buildTimePeriod(
+        new Date(entry.date),
+        effectiveGroupBy,
+        timezone
+      );
       const key = JSON.stringify(timePeriod);
 
-      const existing = timelineMap.get(key);
-      if (existing) {
-        existing.totalCount += 1;
-      } else {
-        timelineMap.set(key, { timePeriod, totalCount: 1 });
+      let bucket = timelineMap.get(key);
+      if (!bucket) {
+        bucket = { timePeriod, totalCount: 0, byType: emptyByType() };
+        timelineMap.set(key, bucket);
       }
+      bucket.totalCount += 1;
+      bucket.byType[entry.voteType] += 1;
     });
 
-    const timeline = Array.from(timelineMap.values())
-      .sort((a, b) => compareTimePeriods(a.timePeriod, b.timePeriod))
-      .map(({ timePeriod, totalCount }) => ({ timePeriod, totalCount }));
+    const timeline = Array.from(timelineMap.values()).sort((a, b) =>
+      compareTimePeriods(a.timePeriod, b.timePeriod)
+    );
 
-    return NextResponse.json({ success: true, timeline });
+    return NextResponse.json({
+      success: true,
+      timezone,
+      groupBy: effectiveGroupBy,
+      timeline,
+    });
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Error fetching vote timeline";
-    console.error("/api/stats/votes/timeline", message, error);
+    console.error("/api/stats/votes/timeline", error);
     return NextResponse.json(
       { success: false, message: "Error fetching vote timeline" },
       { status: 500 }

@@ -6,6 +6,17 @@ import User from "@/models/User";
 import Vote, { VoteType } from "@/models/Vote";
 import mongoose from "mongoose";
 import { encrypt } from "@/lib/cryptoUtils";
+import {
+  parseDateStartOfDay,
+  parseDateEndOfDay,
+  resolveTimezone,
+} from "@/lib/timezoneUtils";
+import {
+  buildFeedbackMatchQuery,
+  CASE_INSENSITIVE_COLLATION,
+} from "@/lib/voteAggregation";
+
+export const dynamic = "force-dynamic";
 
 interface QuestionVoteItem {
   question: string;
@@ -31,11 +42,19 @@ const escapeRegex = (value: string) =>
 const buildCaseInsensitiveExactMatch = (value: string) =>
   new RegExp(`^${escapeRegex(value)}$`, "i");
 
+/**
+ * Public endpoint used by the tablets. Intentionally unauthenticated.
+ */
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
-    const feedbackObj: CreateFeedbackRequestBody = await request.json();
+    let feedbackObj: CreateFeedbackRequestBody;
+    try {
+      feedbackObj = await request.json();
+    } catch {
+      return new Response("Error: Invalid JSON body", { status: 400 });
+    }
 
     const trimmedUsername = feedbackObj.username?.trim();
     const trimmedDeviceToken = feedbackObj.devices?.trim();
@@ -56,20 +75,25 @@ export async function POST(request: NextRequest) {
       return new Response("Error: User not found", { status: 404 });
     }
 
-    const usernameForLinking =
-      user.username?.trim() || user.user?.trim() || trimmedUsername;
-    const usernameForStorage =
-      user.user?.trim() || user.username?.trim() || trimmedUsername;
-    const normalizedUsername = usernameForLinking.toLowerCase();
-
     const device = await Device.findOne({ token: trimmedDeviceToken });
 
     if (!device) {
       return new Response("Error: Device not found", { status: 404 });
     }
 
-    const db = mongoose.connection;
-    const feedbacksCollection = db.collection("feedbacks");
+    // The account alias (`user`) is what devices, questions and exports are
+    // keyed on; always store it lowercased so the dashboard filters match.
+    const usernameForStorage = (
+      user.user?.trim() ||
+      user.username?.trim() ||
+      trimmedUsername
+    ).toLowerCase();
+
+    // Votes are written with `username: device.owner` (see /api/vote), so link
+    // against the same value.
+    const usernameForLinking = (device.owner || usernameForStorage)
+      .toString()
+      .toLowerCase();
 
     const effectiveQuestion =
       feedbackObj.question || "Доволни ли сте от обслужването?";
@@ -88,13 +112,13 @@ export async function POST(request: NextRequest) {
           existingVote &&
           existingVote.device &&
           typeof existingVote.device === "object"
-            ? (existingVote.device as any).token
+            ? (existingVote.device as { token?: string }).token
             : undefined;
 
         if (
           existingVote &&
-          (!existingVote.feedbackId || existingVote.feedbackId === null) &&
-          existingVote.username === normalizedUsername &&
+          !existingVote.feedbackId &&
+          existingVote.username === usernameForLinking &&
           voteDeviceToken === device.token &&
           (!feedbackObj.vote || existingVote.vote === feedbackObj.vote) &&
           (!feedbackObj.question ||
@@ -102,7 +126,7 @@ export async function POST(request: NextRequest) {
         ) {
           linkedVoteObjectId = existingVote._id as mongoose.Types.ObjectId;
         }
-      } catch (err) {
+      } catch {
         /* Ignore invalid vote linkage */
       }
     }
@@ -110,7 +134,7 @@ export async function POST(request: NextRequest) {
     if (!linkedVoteObjectId && feedbackObj.vote) {
       const recentWindowStart = new Date(Date.now() - 5 * 60 * 1000);
       const recentVote = await Vote.findOne({
-        username: normalizedUsername,
+        username: usernameForLinking,
         vote: feedbackObj.vote,
         question: effectiveQuestion,
         "device.token": device.token,
@@ -125,7 +149,11 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const newFeedbackDoc: any = {
+    const now = new Date();
+
+    // Written through the raw collection on purpose: the schema setters would
+    // encrypt the already-encrypted PII a second time.
+    const newFeedbackDoc: Record<string, unknown> = {
       question: effectiveQuestion,
       username: usernameForStorage,
       devices: [device.toObject()],
@@ -134,20 +162,24 @@ export async function POST(request: NextRequest) {
       email: feedbackObj.email ? encrypt(feedbackObj.email) : null,
       comment: feedbackObj.comment ? encrypt(feedbackObj.comment) : null,
       vote: feedbackObj.vote,
-      questionsVote: feedbackObj.votesList
-        ? feedbackObj.votesList.map((item) => ({
-            question: item.question,
-            vote: item.vote,
-          }))
+      questionsVote: Array.isArray(feedbackObj.votesList)
+        ? feedbackObj.votesList
+            .filter((item) => item && typeof item === "object")
+            .map((item) => ({
+              _id: new mongoose.Types.ObjectId(),
+              question: item.question,
+              vote: item.vote,
+            }))
         : [],
-      date: new Date(),
+      linkedVoteId: linkedVoteObjectId,
+      date: now,
+      createdAt: now,
+      updatedAt: now,
     };
 
-    if (linkedVoteObjectId) {
-      newFeedbackDoc.linkedVoteId = linkedVoteObjectId;
-    }
-
-    const insertResult = await feedbacksCollection.insertOne(newFeedbackDoc);
+    const insertResult = await mongoose.connection
+      .collection("feedbacks")
+      .insertOne(newFeedbackDoc);
 
     if (linkedVoteObjectId) {
       await Vote.updateOne(
@@ -158,6 +190,7 @@ export async function POST(request: NextRequest) {
 
     return new Response("Feedback created!", { status: 201 });
   } catch (error) {
+    console.error("POST /api/feedback failed", error);
     return new Response("Error", { status: 500 });
   }
 }
@@ -175,54 +208,46 @@ export async function GET(request: NextRequest) {
     }
 
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1", 10);
-    const limit = parseInt(searchParams.get("limit") || "10", 10);
+    const pageParam = parseInt(searchParams.get("page") || "1", 10);
+    const limitParam = parseInt(searchParams.get("limit") || "10", 10);
+    const page = Number.isNaN(pageParam) || pageParam < 1 ? 1 : pageParam;
+    const limit = Math.min(
+      Math.max(Number.isNaN(limitParam) ? 10 : limitParam, 1),
+      100
+    );
     const startDateString = searchParams.get("startDate");
     const endDateString = searchParams.get("endDate");
+    const timezone = resolveTimezone(searchParams.get("timezone"));
 
-    const matchQuery: any = { username };
+    const startDate = parseDateStartOfDay(startDateString, timezone);
+    const endDate = parseDateEndOfDay(endDateString, timezone);
 
-    let startDate = null;
-    if (startDateString) {
-      try {
-        startDate = new Date(startDateString);
-        if (isNaN(startDate.getTime())) {
-          startDate = null;
-        }
-      } catch (err) {
-        startDate = null;
-      }
+    if (startDateString && !startDate) {
+      return NextResponse.json(
+        { success: false, message: "Invalid startDate format." },
+        { status: 400 }
+      );
+    }
+    if (endDateString && !endDate) {
+      return NextResponse.json(
+        { success: false, message: "Invalid endDate format." },
+        { status: 400 }
+      );
     }
 
-    let endDate = null;
-    if (endDateString) {
-      try {
-        endDate = new Date(endDateString);
-        if (isNaN(endDate.getTime())) {
-          endDate = null;
-        }
-      } catch (err) {
-        endDate = null;
-      }
-    }
+    const matchQuery = buildFeedbackMatchQuery({
+      username,
+      startDate: startDate ?? undefined,
+      endDate: endDate ?? undefined,
+    });
 
-    if (startDate) {
-      matchQuery.date = { ...matchQuery.date, $gte: startDate };
-    }
-
-    if (endDate) {
-      endDate.setHours(23, 59, 59, 999);
-      matchQuery.date = { ...matchQuery.date, $lte: endDate };
-    }
-
-    const totalFeedback = await Feedback.countDocuments(matchQuery);
+    const totalFeedback = await Feedback.countDocuments(matchQuery, {
+      collation: CASE_INSENSITIVE_COLLATION,
+    });
     const totalPages = Math.ceil(totalFeedback / limit);
 
     const feedbackItems = await Feedback.find(matchQuery)
-      .populate({
-        path: "devices",
-        select: "label location token",
-      })
+      .collation(CASE_INSENSITIVE_COLLATION)
       .sort({ date: -1 })
       .skip((page - 1) * limit)
       .limit(limit);
@@ -231,18 +256,17 @@ export async function GET(request: NextRequest) {
       {
         success: true,
         feedback: feedbackItems,
-        totalPages: totalPages,
+        totalPages,
         currentPage: page,
+        totalFeedback,
+        timezone,
       },
       { status: 200 }
     );
   } catch (error) {
-    let errorMessage = "Error fetching feedback";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    console.error("GET /api/feedback failed", error);
     return NextResponse.json(
-      { success: false, message: errorMessage },
+      { success: false, message: "Error fetching feedback" },
       { status: 500 }
     );
   }

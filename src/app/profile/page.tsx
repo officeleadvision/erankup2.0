@@ -63,7 +63,7 @@ const ProfilePage = () => {
         setNewPassword("");
         setConfirmPassword("");
       }
-    } catch (err) {
+    } catch {
       toast.error("Възникна неочаквана грешка. Моля, опитайте отново.");
     } finally {
       setIsSubmitting(false);

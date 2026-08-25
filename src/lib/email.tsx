@@ -54,8 +54,8 @@ export const sendNewUserEmail = async ({
 }: NewUserEmailProps) => {
   const resolvedAccountName =
     typeof accountName === "string" && accountName.trim().length > 0
-      ? to
-      : accountName.trim();
+      ? accountName.trim()
+      : to;
 
   const react = React.createElement(NewUserEmailTemplate, {
     email: to,

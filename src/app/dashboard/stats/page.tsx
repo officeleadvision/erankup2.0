@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, FormEvent } from "react";
+import React, { useEffect, useState, FormEvent, useCallback } from "react";
 import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
@@ -9,13 +9,18 @@ import VoteTimelineChart from "@/components/stats/VoteTimelineChart";
 import SummaryCards from "@/components/stats/SummaryCards";
 import SatisfactionPieChart from "@/components/stats/SatisfactionPieChart";
 import SatisfactionBarChart from "@/components/stats/SatisfactionBarChart";
-import { getVoteTypeDetails } from "@/lib/chartUtils";
-import { formatDateBG } from "@/lib/formatDateBG";
+import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
+import {
+  formatDateInputBG,
+  getUserTimezone,
+  toLocalDateInputValue,
+} from "@/lib/timezoneUtils";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
 
 interface VoteSummary {
   totalVotes: number;
+  lastVoteAt?: string | null;
   votesByType: Array<{ _id: string | null; count: number }>;
   averageScore?: number | null;
   averageLabel?: string | null;
@@ -24,12 +29,26 @@ interface VoteSummary {
 interface VoteTimelinePoint {
   timePeriod: { year: number; month: number; day?: number; hour?: number };
   totalCount: number;
+  byType?: Record<string, number>;
 }
 
 interface VoteTimelineData {
   timeline: VoteTimelinePoint[];
   success?: boolean;
 }
+
+type Period = "day" | "week" | "month" | "year" | "all" | "custom";
+type GroupBy = "day" | "hour" | "month";
+
+const defaultRange = () => {
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - 6);
+  return {
+    start: toLocalDateInputValue(start),
+    end: toLocalDateInputValue(end),
+  };
+};
 
 function StatsPageContent() {
   const { token } = useAuth();
@@ -40,30 +59,39 @@ function StatsPageContent() {
   const [isLoadingSummary, setIsLoadingSummary] = useState(true);
   const [isLoadingTimeline, setIsLoadingTimeline] = useState(true);
 
-  const today = new Date();
-  const defaultEndDate = today.toISOString().split("T")[0];
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(today.getDate() - 6);
-  const defaultStartDate = sevenDaysAgo.toISOString().split("T")[0];
+  // Everything is expressed in the browser's timezone; the API receives it so
+  // day boundaries and buckets line up with what the user sees (and with the
+  // export, when the same timezone is picked there).
+  const [timezone] = useState(() => getUserTimezone());
 
-  const [startDate, setStartDate] = useState(defaultStartDate);
-  const [endDate, setEndDate] = useState(defaultEndDate);
-  const [activePeriod, setActivePeriod] = useState("week");
-  const [timelineGroupBy, setTimelineGroupBy] = useState("day");
+  const [{ start: initialStart, end: initialEnd }] = useState(defaultRange);
+  const [startDate, setStartDate] = useState(initialStart);
+  const [endDate, setEndDate] = useState(initialEnd);
+  const [activePeriod, setActivePeriod] = useState<Period>("week");
+  const [timelineGroupBy, setTimelineGroupBy] = useState<GroupBy>("day");
+  // Columns = totals (on by default); vote-type lines are opt-in.
+  const [showTotals, setShowTotals] = useState(true);
+  const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const allTypesSelected = selectedTypes.length === VOTE_TYPE_ORDER.length;
+  const toggleType = (type: string) =>
+    setSelectedTypes((prev) =>
+      prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
+    );
+  const toggleAllTypes = () =>
+    setSelectedTypes(allTypesSelected ? [] : [...VOTE_TYPE_ORDER]);
 
-  const fetchVoteSummary = async () => {
+  const fetchVoteSummary = useCallback(async () => {
     if (!token) return;
     setIsLoadingSummary(true);
     try {
       const summaryParams = new URLSearchParams({
         startDate,
         endDate,
+        timezone,
       }).toString();
       const summaryData = await apiClient<VoteSummary>(
         `/stats/votes/summary?${summaryParams}`,
-        {
-          token,
-        }
+        { token }
       );
       setSummary(summaryData);
     } catch (err) {
@@ -75,137 +103,110 @@ function StatsPageContent() {
       setSummary(null);
     }
     setIsLoadingSummary(false);
-  };
+  }, [token, startDate, endDate, timezone]);
 
-  const fetchVoteTimeline = async () => {
+  const fetchVoteTimeline = useCallback(async () => {
     if (!token) return;
     setIsLoadingTimeline(true);
+
+    const isOneDayRange = startDate === endDate;
+    const effectiveGroupBy: GroupBy =
+      timelineGroupBy === "hour" && !isOneDayRange ? "day" : timelineGroupBy;
+
     try {
-      const isOneDayRange = startDate === endDate;
-
-      let effectiveGroupBy = timelineGroupBy;
-      if (timelineGroupBy === "hour" && !isOneDayRange) {
-        effectiveGroupBy = "day";
-      }
-
-      const timelineParamsObj: Record<string, string> = {
+      const timelineParams = new URLSearchParams({
         startDate,
         endDate,
         groupBy: effectiveGroupBy,
-      };
-
-      const timelineParams = new URLSearchParams(timelineParamsObj).toString();
+        timezone,
+      }).toString();
       const data = await apiClient<VoteTimelineData>(
         `/stats/votes/timeline?${timelineParams}`,
         { token }
       );
       setTimelineData(data);
-    } catch (err) {
-      if (timelineGroupBy === "hour") {
-        const hourErrorMessage =
-          "Почасово групиране е възможно само за еднодневен период.";
-        toast.warn(hourErrorMessage);
-        setTimelineGroupBy("day");
-        const fallbackParams = new URLSearchParams({
-          startDate,
-          endDate,
-          groupBy: "day",
-        }).toString();
-
-        try {
-          const fallbackData = await apiClient<VoteTimelineData>(
-            `/stats/votes/timeline?${fallbackParams}`,
-            { token }
-          );
-          setTimelineData(fallbackData);
-        } catch {
-          const fallbackErrorMessage =
-            "Грешка при извличане на данни за графиката (резервен вариант).";
-          toast.error(fallbackErrorMessage);
-          setTimelineData(null);
-        }
-      } else {
-        const generalErrorMessage =
-          "Грешка при извличане на данни за графиката.";
-        toast.error(generalErrorMessage);
-        setTimelineData(null);
+      if (effectiveGroupBy !== timelineGroupBy) {
+        setTimelineGroupBy(effectiveGroupBy);
       }
+    } catch (err) {
+      const message =
+        err instanceof Error
+          ? err.message
+          : "Грешка при извличане на данни за графиката.";
+      toast.error(message);
+      setTimelineData(null);
     }
     setIsLoadingTimeline(false);
-  };
+  }, [token, startDate, endDate, timelineGroupBy, timezone]);
 
   useEffect(() => {
-    if (token) {
-      fetchVoteSummary();
-    }
-  }, [token, startDate, endDate]);
+    fetchVoteSummary();
+  }, [fetchVoteSummary]);
 
   useEffect(() => {
-    if (token) {
-      fetchVoteTimeline();
-    }
-  }, [startDate, endDate, timelineGroupBy, token]);
+    fetchVoteTimeline();
+  }, [fetchVoteTimeline]);
 
-  const handlePeriodChange = (period: string) => {
+  const handlePeriodChange = (period: Period) => {
     setActivePeriod(period);
-    let newStartDate = new Date();
-    let newEndDate = new Date();
-    let newGroupBy = "day";
-
-    newEndDate.setHours(23, 59, 59, 999);
+    const now = new Date();
+    let newStartDate = new Date(now);
+    let newGroupBy: GroupBy = "day";
 
     switch (period) {
       case "all":
         newStartDate = new Date(2000, 0, 1);
-        newStartDate.setHours(0, 0, 0, 0);
         newGroupBy = "month";
         break;
       case "day":
-        newStartDate.setHours(0, 0, 0, 0);
-        newEndDate = new Date(newStartDate);
-        newEndDate.setHours(23, 59, 59, 999);
         newGroupBy = "hour";
         break;
       case "week":
-        newStartDate.setDate(newEndDate.getDate() - 6);
-        newStartDate.setHours(0, 0, 0, 0);
+        newStartDate.setDate(now.getDate() - 6);
         newGroupBy = "day";
         break;
       case "month":
-        newStartDate.setFullYear(newStartDate.getFullYear() - 1);
-        newStartDate.setDate(1);
-        newStartDate.setHours(0, 0, 0, 0);
-        newGroupBy = "month";
+        // Current month, day by day.
+        newStartDate = new Date(now.getFullYear(), now.getMonth(), 1);
+        newGroupBy = "day";
         break;
       case "year":
-        newStartDate.setMonth(0, 1);
-        newStartDate.setHours(0, 0, 0, 0);
+        newStartDate = new Date(now.getFullYear(), 0, 1);
         newGroupBy = "month";
         break;
       default:
-        newStartDate.setDate(newEndDate.getDate() - 6);
-        newStartDate.setHours(0, 0, 0, 0);
+        newStartDate.setDate(now.getDate() - 6);
         newGroupBy = "day";
     }
 
-    setStartDate(newStartDate.toISOString().split("T")[0]);
-    setEndDate(newEndDate.toISOString().split("T")[0]);
+    setStartDate(toLocalDateInputValue(newStartDate));
+    setEndDate(toLocalDateInputValue(now));
     setTimelineGroupBy(newGroupBy);
   };
 
   const handleCustomDateFilterSubmit = (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setActivePeriod("custom");
-    if (new Date(startDate) > new Date(endDate)) {
+    if (startDate > endDate) {
       toast.error("Началната дата не може да бъде след крайната дата.");
       return;
     }
+    setActivePeriod("custom");
+    setTimelineGroupBy(startDate === endDate ? "hour" : "day");
     fetchVoteSummary();
     fetchVoteTimeline();
   };
 
-  const voteTypeDetails = summary?.votesByType.map((item) =>
-    getVoteTypeDetails(item._id)
+  const periodLabel = (
+    <>
+      Показване на данни от{" "}
+      <span className="text-slate-800 font-medium">
+        {formatDateInputBG(startDate)}
+      </span>{" "}
+      до{" "}
+      <span className="text-slate-800 font-medium">
+        {formatDateInputBG(endDate)}
+      </span>
+    </>
   );
 
   return (
@@ -231,6 +232,7 @@ function StatsPageContent() {
             type="date"
             id="startDate"
             value={startDate}
+            max={endDate || undefined}
             onChange={(e) => setStartDate(e.target.value)}
             className="w-full text-gray-900 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
@@ -246,6 +248,7 @@ function StatsPageContent() {
             type="date"
             id="endDate"
             value={endDate}
+            min={startDate || undefined}
             onChange={(e) => setEndDate(e.target.value)}
             className="w-full text-gray-900 p-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"
           />
@@ -264,23 +267,9 @@ function StatsPageContent() {
             <h3 className="text-xl font-semibold text-slate-700">
               Активност (Трафик)
             </h3>
-            <p className="text-sm text-slate-500">
-              Показване на данни от{" "}
-              <span className="text-slate-800 font-medium">
-                {new Date(startDate).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
-              </span>{" "}
-              до{" "}
-              <span className="text-slate-800 font-medium">
-                {new Date(endDate).toLocaleDateString("en-GB", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
-              </span>
+            <p className="text-sm text-slate-500">{periodLabel}</p>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Часова зона: {timezone.replace(/_/g, " ")}
             </p>
           </div>
           <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap gap-1">
@@ -288,6 +277,7 @@ function StatsPageContent() {
               (period) => (
                 <button
                   key={period}
+                  type="button"
                   onClick={() => handlePeriodChange(period)}
                   className={`px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors
                     ${
@@ -306,20 +296,99 @@ function StatsPageContent() {
             )}
           </div>
         </div>
+        <div className="flex flex-wrap items-center gap-2.5 mb-5">
+          <button
+            type="button"
+            onClick={() => setShowTotals((prev) => !prev)}
+            aria-pressed={showTotals}
+            className={`px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
+              showTotals
+                ? "bg-teal-500 text-white border-teal-500"
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            Общо
+          </button>
+          <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
+          <button
+            type="button"
+            onClick={toggleAllTypes}
+            className={`px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
+              allTypesSelected
+                ? "bg-slate-800 text-white border-slate-800"
+                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+            }`}
+          >
+            Всички
+          </button>
+          {VOTE_TYPE_ORDER.map((type) => {
+            const details = getVoteTypeDetails(type);
+            const active = selectedTypes.includes(type);
+            return (
+              <button
+                key={type}
+                type="button"
+                onClick={() => toggleType(type)}
+                aria-pressed={active}
+                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
+                  active
+                    ? "text-white"
+                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
+                }`}
+                style={
+                  active
+                    ? { backgroundColor: details.color, borderColor: details.color }
+                    : undefined
+                }
+              >
+                <span
+                  className="h-2.5 w-2.5 rounded-full border border-white/60"
+                  style={{ backgroundColor: details.color }}
+                />
+                {details.label}
+              </button>
+            );
+          })}
+        </div>
         {isLoadingTimeline ? (
           <div className="text-center py-10 text-slate-600 h-96 flex items-center justify-center">
             <Loader text="Зареждане на данни..." />
+          </div>
+        ) : !showTotals && selectedTypes.length === 0 ? (
+          <div className="text-center py-10 text-slate-500">
+            Изберете поне една серия („Общо“ или тип глас).
           </div>
         ) : timelineData && timelineData.timeline.length > 0 ? (
           <div className="h-96 bg-white rounded">
             <VoteTimelineChart
               timelineData={timelineData.timeline}
-              groupBy={timelineGroupBy as "day" | "hour" | "month" | "week"}
+              groupBy={timelineGroupBy}
+              selectedTypes={selectedTypes}
+              showTotals={showTotals}
             />
           </div>
         ) : (
           <div className="text-center py-10 text-slate-500">
-            Няма данни за избрания период или група.
+            <p>Няма гласували за този период.</p>
+            {summary?.lastVoteAt ? (
+              <p className="mt-1 text-sm">
+                Последен глас за този акаунт:{" "}
+                <span className="font-medium text-slate-700">
+                  {new Date(summary.lastVoteAt).toLocaleString("bg-BG", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </span>{" "}
+                — изберете по-дълъг период или „Всички времена“.
+              </p>
+            ) : (
+              <p className="mt-1 text-sm">
+                За този акаунт още няма гласували.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -329,24 +398,7 @@ function StatsPageContent() {
           <h3 className="text-xl font-semibold text-slate-700 mb-1">
             Удовлетвореност (общо)
           </h3>
-          <p className="text-sm text-slate-500">
-            Показване на данни от{" "}
-            <span className="text-slate-800 font-medium">
-              {new Date(startDate).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>{" "}
-            до{" "}
-            <span className="text-slate-800 font-medium">
-              {new Date(endDate).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>
-          </p>
+          <p className="text-sm text-slate-500">{periodLabel}</p>
           <div className="h-96 bg-white rounded">
             <SatisfactionPieChart
               summary={summary}
@@ -358,24 +410,7 @@ function StatsPageContent() {
           <h3 className="text-xl font-semibold text-slate-700 mb-1">
             Удовлетвореност (детайлно)
           </h3>
-          <p className="text-sm text-slate-500">
-            Показване на данни от{" "}
-            <span className="text-slate-800 font-medium">
-              {new Date(startDate).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>{" "}
-            до{" "}
-            <span className="text-slate-800 font-medium">
-              {new Date(endDate).toLocaleDateString("en-GB", {
-                day: "2-digit",
-                month: "2-digit",
-                year: "numeric",
-              })}
-            </span>
-          </p>
+          <p className="text-sm text-slate-500">{periodLabel}</p>
           <div className="h-96 bg-white rounded">
             <SatisfactionBarChart
               summary={summary}
@@ -414,7 +449,7 @@ function StatsPageContent() {
               {summary.votesByType
                 .filter((item) => item._id !== null)
                 .map((item) => {
-                  const voteDetails = getVoteTypeDetails(item._id!);
+                  const voteDetails = getVoteTypeDetails(item._id);
                   const percentage =
                     summary.totalVotes > 0
                       ? ((item.count / summary.totalVotes) * 100).toFixed(2)
@@ -441,7 +476,7 @@ function StatsPageContent() {
           </table>
         ) : (
           <div className="text-center py-10 text-slate-500">
-            Няма детайлни данни за избрания период.
+            Няма гласували за този период.
           </div>
         )}
       </div>

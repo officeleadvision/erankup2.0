@@ -3,7 +3,8 @@ import dbConnect from "@/lib/mongodb";
 import Vote, { type VoteType } from "@/models/Vote";
 import Device from "@/models/Device";
 import Question from "@/models/Question";
-import mongoose from "mongoose";
+
+export const dynamic = "force-dynamic";
 
 interface AddVoteRequestBody {
   token: string;
@@ -11,12 +12,32 @@ interface AddVoteRequestBody {
   vote: VoteType;
 }
 
+const validVoteTypes: VoteType[] = [
+  "superlike",
+  "like",
+  "neutral",
+  "dislike",
+  "superdislike",
+];
+
+/**
+ * Public endpoint used by the tablets. Intentionally unauthenticated.
+ */
 export async function POST(request: NextRequest) {
   try {
     await dbConnect();
 
-    const { token, questionText, vote }: AddVoteRequestBody =
-      await request.json();
+    let body: AddVoteRequestBody;
+    try {
+      body = await request.json();
+    } catch {
+      return NextResponse.json(
+        { success: false, message: "Invalid JSON body." },
+        { status: 400 }
+      );
+    }
+
+    const { token, questionText, vote } = body;
 
     if (!token || !vote) {
       return NextResponse.json(
@@ -28,13 +49,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const validVoteTypes: VoteType[] = [
-      "superlike",
-      "like",
-      "neutral",
-      "dislike",
-      "superdislike",
-    ];
     if (!validVoteTypes.includes(vote)) {
       return NextResponse.json(
         { success: false, message: "Invalid vote type provided." },
@@ -42,7 +56,7 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const device = await Device.findOne({ token: token });
+    const device = await Device.findOne({ token: token.trim() });
     if (!device) {
       return NextResponse.json(
         { success: false, message: "Device not found for the provided token." },
@@ -50,21 +64,32 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    let effectiveQuestion;
+    // Prefer the exact question the tablet showed. Fall back to the device's
+    // first active question, then to any active question of the owner.
+    const trimmedQuestionText =
+      typeof questionText === "string" ? questionText.trim() : "";
 
-    effectiveQuestion = await Question.findOne({
-      username: device.owner,
-      devices: {
-        $elemMatch: { $eq: device._id },
-      },
-      hidden: false,
-    }).sort({ date: -1, order: 1 });
+    let effectiveQuestion = trimmedQuestionText
+      ? await Question.findOne({
+          username: device.owner,
+          question: trimmedQuestionText,
+          hidden: false,
+        })
+      : null;
+
+    if (!effectiveQuestion) {
+      effectiveQuestion = await Question.findOne({
+        username: device.owner,
+        devices: device._id,
+        hidden: false,
+      }).sort({ order: 1, date: -1 });
+    }
 
     if (!effectiveQuestion) {
       effectiveQuestion = await Question.findOne({
         username: device.owner,
         hidden: false,
-      }).sort({ date: -1, order: 1 });
+      }).sort({ order: 1, date: -1 });
     }
 
     if (!effectiveQuestion) {
@@ -77,24 +102,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const deviceObjectForVote = {
-      _id: device.id,
-      owner: device.owner,
-      location: device.location,
-      label: device.label,
-      token: device.token,
-    };
-
-    const voteDocumentToSave = {
+    const savedVote = await Vote.create({
       question: effectiveQuestion.question,
       date: new Date(),
-      vote: vote,
-      device: deviceObjectForVote,
+      vote,
+      device: {
+        _id: device.id,
+        owner: device.owner,
+        location: device.location,
+        label: device.label,
+        token: device.token,
+      },
       username: device.owner,
       location: device.location,
-    };
-
-    const savedVote = await Vote.create(voteDocumentToSave);
+    });
 
     return NextResponse.json(
       {
@@ -105,12 +126,9 @@ export async function POST(request: NextRequest) {
       { status: 201 }
     );
   } catch (error) {
-    let errorMessage = "Error submitting vote";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    console.error("POST /api/vote failed", error);
     return NextResponse.json(
-      { success: false, message: errorMessage },
+      { success: false, message: "Error submitting vote" },
       { status: 500 }
     );
   }
@@ -128,27 +146,15 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const votes = await Vote.find({ username })
-      .populate({
-        path: "device",
-        select: "label location token",
-      })
-      .sort({ date: -1 });
+    const votes = await Vote.find({ username: username.toLowerCase() })
+      .sort({ date: -1 })
+      .limit(500);
 
-    return NextResponse.json(
-      {
-        success: true,
-        votes,
-      },
-      { status: 200 }
-    );
+    return NextResponse.json({ success: true, votes }, { status: 200 });
   } catch (error) {
-    let errorMessage = "Error fetching votes";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    console.error("GET /api/vote failed", error);
     return NextResponse.json(
-      { success: false, message: errorMessage },
+      { success: false, message: "Error fetching votes" },
       { status: 500 }
     );
   }

@@ -38,7 +38,7 @@ async function getUsernameFromToken(
 
 export async function GET(
   request: NextRequest,
-  { params }: { params: { identifier: string } }
+  { params }: { params: Promise<{ identifier: string }> }
 ) {
   try {
     await dbConnect();
@@ -99,7 +99,7 @@ export async function GET(
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { identifier: string } }
+  { params }: { params: Promise<{ identifier: string }> }
 ) {
   try {
     await dbConnect();
@@ -328,7 +328,7 @@ export async function PUT(
 
 export async function PATCH(
   request: NextRequest,
-  { params }: { params: { identifier: string } }
+  { params }: { params: Promise<{ identifier: string }> }
 ) {
   try {
     await dbConnect();

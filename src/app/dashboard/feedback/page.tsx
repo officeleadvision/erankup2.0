@@ -7,6 +7,11 @@ import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
+import {
+  formatDateInputBG,
+  getUserTimezone,
+  toLocalDateInputValue,
+} from "@/lib/timezoneUtils";
 
 const voteScoreMap: Record<string, number> = {
   superdislike: 1,
@@ -90,13 +95,15 @@ function FeedbackPageContent() {
   const [isLoading, setIsLoading] = useState(true);
   const { token } = useAuth();
 
-  const today = new Date().toISOString().split("T")[0];
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-
-  const [startDate, setStartDate] = useState(thirtyDaysAgo);
-  const [endDate, setEndDate] = useState(today);
+  // Local calendar dates + the browser timezone, so "today" is really today
+  // and the day boundaries match the dashboard/export views.
+  const [timezone] = useState(() => getUserTimezone());
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return toLocalDateInputValue(d);
+  });
+  const [endDate, setEndDate] = useState(() => toLocalDateInputValue());
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -107,6 +114,7 @@ function FeedbackPageContent() {
       const params = new URLSearchParams();
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
+      params.append("timezone", timezone);
       params.append("page", currentPage.toString());
       params.append("limit", ITEMS_PER_PAGE.toString());
 
@@ -136,7 +144,7 @@ function FeedbackPageContent() {
           setIsLoading(false);
         });
     }
-  }, [token, startDate, endDate, currentPage]);
+  }, [token, startDate, endDate, currentPage, timezone]);
 
   useEffect(() => {
     fetchFeedback();
@@ -204,13 +212,7 @@ function FeedbackPageContent() {
             >
               Начална дата (
               <span className="text-slate-800 font-medium">
-                {startDate
-                  ? new Date(startDate).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })
-                  : "N/A"}
+                {startDate ? formatDateInputBG(startDate) : "N/A"}
               </span>
               )
             </label>
@@ -218,6 +220,7 @@ function FeedbackPageContent() {
               type="date"
               id="startDate"
               value={startDate}
+              max={endDate || undefined}
               onChange={(e) => setStartDate(e.target.value)}
               className="mt-1 text-gray-900 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />
@@ -229,13 +232,7 @@ function FeedbackPageContent() {
             >
               Крайна дата (
               <span className="text-slate-800 font-medium">
-                {endDate
-                  ? new Date(endDate).toLocaleDateString("en-GB", {
-                      day: "2-digit",
-                      month: "2-digit",
-                      year: "numeric",
-                    })
-                  : "N/A"}
+                {endDate ? formatDateInputBG(endDate) : "N/A"}
               </span>
               )
             </label>
@@ -243,6 +240,7 @@ function FeedbackPageContent() {
               type="date"
               id="endDate"
               value={endDate}
+              min={startDate || undefined}
               onChange={(e) => setEndDate(e.target.value)}
               className="mt-1 text-gray-900 block w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
             />

@@ -5,7 +5,6 @@ import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
-import Link from "next/link";
 import Modal from "@/components/ui/Modal";
 import AddQuestionForm from "@/components/questions/AddQuestionForm";
 import EditQuestionForm from "@/components/questions/EditQuestionForm";
@@ -16,16 +15,7 @@ import SortableQuestionItem, {
 import QuestionItem from "@/components/questions/items/QuestionItem";
 import ConfirmHideQuestionModal from "@/components/questions/modals/ConfirmHideQuestionModal";
 import ViewDevicesModal from "@/components/questions/modals/ViewDevicesModal";
-import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  EyeIcon,
-  EyeSlashIcon,
-  ListBulletIcon,
-  BarsArrowUpIcon,
-  XCircleIcon,
-} from "@heroicons/react/24/outline";
+import { PlusIcon } from "@heroicons/react/24/outline";
 import {
   DndContext,
   closestCenter,
@@ -39,10 +29,8 @@ import {
   arrayMove,
   SortableContext,
   sortableKeyboardCoordinates,
-  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
-import { CSS } from "@dnd-kit/utilities";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
 
@@ -52,31 +40,11 @@ interface QuestionsApiResponse {
   message?: string;
 }
 
-interface Device {
-  _id: string;
-  label: string;
-}
-
-interface QuestionUpdateData {
-  hidden?: boolean;
-  order?: number;
-  reorder?: { questionId: string; newOrder: number }[];
-}
-
 interface UpdateResponse {
   success: boolean;
   question: Question;
   message?: string;
 }
-
-const formatDateBG = (dateString: string): string => {
-  const date = new Date(dateString);
-  return date.toLocaleDateString("bg-BG", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-  });
-};
 
 function QuestionsPageContent() {
   const { token, isInitialized, isLoading: isLoadingAuth } = useAuth();
@@ -188,8 +156,10 @@ function QuestionsPageContent() {
       } else {
         toast.error(response.message || "Неуспешно скриване на въпрос.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Грешка при скриване на въпроса.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Грешка при скриване на въпроса."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -220,8 +190,10 @@ function QuestionsPageContent() {
       } else {
         toast.error(response.message || "Грешка при промяна на видимостта.");
       }
-    } catch (err: any) {
-      toast.error(err.message || "Грешка при промяна на видимостта.");
+    } catch (err) {
+      toast.error(
+        err instanceof Error ? err.message : "Грешка при промяна на видимостта."
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -304,7 +276,7 @@ function QuestionsPageContent() {
         toast.success("Поредността на въпросите е актуализирана.");
         fetchQuestions();
       }
-    } catch (err: any) {
+    } catch {
       toast.error(
         "Грешка при пренареждане на въпросите. Възстановяване на предишната подредба."
       );

@@ -8,7 +8,7 @@ import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
 
 interface AddDeviceFormProps {
-  onSuccess: (newDevice: any) => void;
+  onSuccess: (newDevice: unknown) => void;
   onCancel: () => void;
 }
 
@@ -33,7 +33,11 @@ export default function AddDeviceForm({
 
     try {
       const newDeviceData = { label, location };
-      const response = await apiClient<any>("/devices", {
+      const response = await apiClient<{
+        success: boolean;
+        device?: unknown;
+        message?: string;
+      }>("/devices", {
         method: "POST",
         body: newDeviceData,
         token,

@@ -3,7 +3,6 @@
 import React from "react";
 import Modal from "@/components/ui/Modal";
 import Loader from "@/components/ui/Loader";
-import { TrashIcon } from "@heroicons/react/24/outline";
 
 interface ConfirmHideQuestionModalProps {
   isOpen: boolean;

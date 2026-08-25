@@ -3,7 +3,7 @@
 import React, { useState, FormEvent, useEffect } from "react";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
-import { CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
+import { XCircleIcon } from "@heroicons/react/24/outline";
 import Select, { MultiValue } from "react-select";
 import Loader from "@/components/ui/Loader";
 import { toast } from "react-toastify";
@@ -161,8 +161,7 @@ export default function EditQuestionForm({
         errorMessage = (err as { message: string }).message;
       }
 
-      const status = (err as any)?.response?.status || (err as any)?.status;
-      if (status === 401) {
+      if (errorMessage.includes("401")) {
         toast.error("Неуспешна автентикация. Моля, влезте отново.");
       } else {
         toast.error(errorMessage);

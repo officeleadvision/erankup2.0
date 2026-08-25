@@ -5,21 +5,25 @@ import {
   Chart as ChartJS,
   CategoryScale,
   LinearScale,
+  BarElement,
   PointElement,
   LineElement,
   Title,
   Tooltip,
   Legend,
   TimeScale,
-  ChartOptions,
+  type ChartOptions,
+  type ChartData,
 } from "chart.js";
-import { Line } from "react-chartjs-2";
+import { Chart } from "react-chartjs-2";
 import "chartjs-adapter-date-fns";
 import ChartDataLabels from "chartjs-plugin-datalabels";
+import { getVoteTypeDetails } from "@/lib/chartUtils";
 
 ChartJS.register(
   CategoryScale,
   LinearScale,
+  BarElement,
   PointElement,
   LineElement,
   Title,
@@ -32,45 +36,85 @@ ChartJS.register(
 interface VoteTimelinePointFE {
   timePeriod: { year: number; month: number; day?: number; hour?: number };
   totalCount: number;
+  byType?: Record<string, number>;
 }
 
 interface VoteTimelineChartProps {
   timelineData: VoteTimelinePointFE[];
   groupBy: "day" | "hour" | "month" | "week";
+  /** Vote types to overlay as lines (empty = totals only). */
+  selectedTypes?: string[];
+  /** Show the totals columns. */
+  showTotals?: boolean;
 }
 
 const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
   timelineData,
   groupBy,
+  selectedTypes = [],
+  showTotals = true,
 }) => {
+  // The API buckets by wall-clock components in the browser's own timezone
+  // (we send it along), so build LOCAL dates here: the axis then shows the
+  // same day/hour the bucket was computed for, with no UTC shift.
   const labels = timelineData.map((point) => {
     const { year, month, day, hour } = point.timePeriod;
-
     if (groupBy === "hour" && day !== undefined && hour !== undefined) {
-      return new Date(Date.UTC(year, month - 1, day, hour)).toISOString();
-    } else if ((groupBy === "day" || groupBy === "week") && day !== undefined) {
-      return new Date(Date.UTC(year, month - 1, day)).toISOString();
-    } else if (groupBy === "month") {
-      return new Date(Date.UTC(year, month - 1, 1)).toISOString();
+      return new Date(year, month - 1, day, hour);
     }
-    return new Date(Date.UTC(year, month - 1, day || 1)).toISOString();
+    if (groupBy === "month") {
+      return new Date(year, month - 1, 1);
+    }
+    return new Date(year, month - 1, day ?? 1);
   });
 
-  const dataPoints = timelineData.map((point) => point.totalCount);
-  const maxCount = Math.max(...dataPoints, 0);
+  const totals = timelineData.map((point) => point.totalCount);
+  const maxCount = Math.max(...totals, 0);
   const yMax = maxCount > 0 ? Math.ceil(maxCount * 1.25) : 10;
 
-  const data = {
-    labels: labels,
+  const data: ChartData<"bar" | "line", number[], Date> = {
+    labels,
     datasets: [
-      {
-        label: "Общ брой гласове",
-        data: dataPoints,
-        fill: true,
-        borderColor: "rgb(75, 192, 192)",
-        backgroundColor: "rgba(75, 192, 192, 0.2)",
-        tension: 0.4,
-      },
+      ...(showTotals
+        ? [
+            {
+              type: "bar" as const,
+              label: "Общо",
+              data: totals,
+              backgroundColor: "rgba(20, 184, 166, 0.35)",
+              borderColor: "rgb(13, 148, 136)",
+              borderWidth: 1,
+              borderRadius: 4,
+              order: 2,
+              datalabels: {
+                display: true,
+                color: "#0f172a",
+                anchor: "end" as const,
+                align: "top" as const,
+                offset: 2,
+                font: { weight: "bold" as const, size: 11 },
+                formatter: (value: number) => (value > 0 ? value : ""),
+              },
+            },
+          ]
+        : []),
+      ...selectedTypes.map((type) => {
+        const details = getVoteTypeDetails(type);
+        return {
+          type: "line" as const,
+          label: details.label,
+          data: timelineData.map((point) => point.byType?.[type] ?? 0),
+          borderColor: details.color,
+          backgroundColor: details.color,
+          borderWidth: 2,
+          pointRadius: 3,
+          pointHoverRadius: 5,
+          tension: 0.3,
+          fill: false,
+          order: 1,
+          datalabels: { display: false },
+        };
+      }),
     ],
   };
 
@@ -90,7 +134,6 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
       break;
     case "week":
       timeUnit = "week";
-      tooltipFmt = "dd.MM.yyyy";
       displayFmt = { week: "dd.MM" };
       break;
     case "month":
@@ -100,57 +143,46 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
       break;
   }
 
-  const options: ChartOptions<"line"> = {
+  const options: ChartOptions<"bar" | "line"> = {
     responsive: true,
     maintainAspectRatio: false,
+    interaction: { mode: "index", intersect: false },
     plugins: {
       legend: {
-        display: false,
+        display: selectedTypes.length > 0 || !showTotals,
+        position: "bottom",
+        labels: { usePointStyle: true, boxWidth: 8 },
       },
-      title: {
-        display: false,
-      },
-      datalabels: {
-        color: "#000",
-        anchor: "end" as const,
-        align: "top" as const,
-        offset: 5,
-        font: {
-          weight: "bold" as const,
-          size: 11,
-        },
-        formatter: (value: number) => {
-          return value > 0 ? value : "";
+      title: { display: false },
+      tooltip: {
+        callbacks: {
+          footer: (items) => {
+            const total = items.find((i) => i.dataset.type === "bar");
+            return total ? `Общо: ${total.parsed.y}` : "";
+          },
         },
       },
     },
     scales: {
       x: {
         type: "time" as const,
+        offset: true,
         time: {
           unit: timeUnit,
           tooltipFormat: tooltipFmt,
           displayFormats: displayFmt,
         },
-        title: {
-          display: false,
-        },
-        grid: {
-          display: false,
-        },
+        grid: { display: false },
       },
       y: {
         beginAtZero: true,
         max: yMax,
-        title: {
-          display: false,
-        },
-        ticks: {},
+        ticks: { precision: 0 },
       },
     },
   };
 
-  return <Line options={options} data={data} />;
+  return <Chart type="bar" options={options} data={data} />;
 };
 
 export default VoteTimelineChart;

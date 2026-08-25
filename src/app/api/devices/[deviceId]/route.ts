@@ -11,9 +11,9 @@ interface DeviceUpdateRequest {
 
 export async function PUT(
   request: NextRequest,
-  { params }: { params: { deviceId: string } }
+  { params }: { params: Promise<{ deviceId: string }> }
 ) {
-  const { deviceId } = params;
+  const { deviceId } = await params;
   try {
     await dbConnect();
     const username = request.headers.get("x-user-username");
@@ -143,9 +143,9 @@ export async function PUT(
 
 export async function DELETE(
   request: NextRequest,
-  { params }: { params: { deviceId: string } }
+  { params }: { params: Promise<{ deviceId: string }> }
 ) {
-  const { deviceId } = params;
+  const { deviceId } = await params;
   try {
     await dbConnect();
     const username = request.headers.get("x-user-username");

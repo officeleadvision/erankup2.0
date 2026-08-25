@@ -32,7 +32,6 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     await dbConnect();
     await ensureBlockedField();
     await ensureModeratorField();
-    await ensureModeratorField();
 
     const params = await context.params;
     const userId = params.id;
@@ -111,7 +110,7 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
     }
 
     const requesterId = requester._id.toString();
-    const targetId = targetUser._id.toString();
+    const targetId = String(targetUser._id);
     const isSelf = requesterId === targetId;
     const changeSet: Record<string, { from: unknown; to: unknown }> = {};
     let hasChanges = false;
@@ -286,7 +285,7 @@ export async function DELETE(request: NextRequest, context: RouteContext) {
       }
     }
 
-    if (targetUser._id.toString() === requester._id.toString()) {
+    if (String(targetUser._id) === String(requester._id)) {
       return NextResponse.json(
         {
           success: false,

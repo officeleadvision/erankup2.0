@@ -1,9 +1,16 @@
 import React from "react";
 import { Pie } from "react-chartjs-2";
-import { Chart as ChartJS, ArcElement, Tooltip, Legend, Title } from "chart.js";
+import {
+  Chart as ChartJS,
+  ArcElement,
+  Tooltip,
+  Legend,
+  Title,
+  type TooltipItem,
+} from "chart.js";
+import type { Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
 import ChartDataLabels from "chartjs-plugin-datalabels";
-import { VoteType } from "@/models/Vote";
 import Loader from "@/components/ui/Loader";
 
 ChartJS.register(ArcElement, Tooltip, Legend, Title, ChartDataLabels);
@@ -37,7 +44,7 @@ const SatisfactionPieChart: React.FC<SatisfactionPieChartProps> = ({
   if (!hasData) {
     return (
       <div className="h-72 md:h-96 flex items-center justify-center">
-        <p className="text-gray-500">Няма данни за кръговата диаграма.</p>
+        <p className="text-gray-500">Няма гласували за този период.</p>
       </div>
     );
   }
@@ -100,13 +107,13 @@ const SatisfactionPieChart: React.FC<SatisfactionPieChartProps> = ({
       },
       tooltip: {
         callbacks: {
-          label: function (context: any) {
+          label: function (context: TooltipItem<"pie">) {
             let label = context.label || "";
             if (label) {
               label += ": ";
             }
             if (context.parsed !== null) {
-              const total = context.dataset.data.reduce(
+              const total = (context.dataset.data as number[]).reduce(
                 (acc: number, val: number) => acc + val,
                 0
               );
@@ -124,8 +131,8 @@ const SatisfactionPieChart: React.FC<SatisfactionPieChartProps> = ({
           weight: "bold" as const,
           size: 14,
         },
-        formatter: (value: number, context: any) => {
-          const total = context.dataset.data.reduce(
+        formatter: (value: number, context: DataLabelsContext) => {
+          const total = (context.dataset.data as number[]).reduce(
             (acc: number, val: number) => acc + val,
             0
           );

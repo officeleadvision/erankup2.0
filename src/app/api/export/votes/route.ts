@@ -2,22 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import dbConnect from "@/lib/mongodb";
 import Feedback from "@/models/Feedback";
 import Device from "@/models/Device";
-import { decrypt } from "@/lib/cryptoUtils";
 import { logActivity } from "@/lib/activityLogger";
 import {
   formatDateInTimezone,
-  parseDateStartOfDayUTC,
-  parseDateEndOfDayUTC,
+  parseDateStartOfDay,
+  parseDateEndOfDay,
+  resolveTimezone,
 } from "@/lib/timezoneUtils";
-import * as XLSX from "xlsx";
+import {
+  buildFeedbackMatchQuery,
+  CASE_INSENSITIVE_COLLATION,
+  extractQuestionVoteItemsFromFeedback,
+} from "@/lib/voteAggregation";
+import {
+  buildExportResponse,
+  extractDeviceField,
+  parseExportFormat,
+  safeDecrypt,
+  toDevicesArray,
+} from "@/lib/exportUtils";
 
 export const runtime = "nodejs";
-
-type DeviceLike = {
-  label?: string | null;
-  location?: string | null;
-  token?: string | null;
-};
+export const dynamic = "force-dynamic";
 
 const voteTranslations: Record<string, string> = {
   superlike: "Много доволен",
@@ -29,46 +35,22 @@ const voteTranslations: Record<string, string> = {
 
 const translateVote = (vote?: unknown) => {
   if (!vote || typeof vote !== "string") return "";
-  return voteTranslations[vote] || vote;
+  return voteTranslations[vote.toLowerCase()] || vote;
 };
 
-const extractDeviceField = (
-  deviceEntry: any,
-  field: "label" | "location" | "token"
-) => {
-  if (!deviceEntry) return undefined;
-  if (deviceEntry[field]) return deviceEntry[field];
-  if (deviceEntry?.device && deviceEntry.device[field])
-    return deviceEntry.device[field];
-  if (deviceEntry?._doc && deviceEntry._doc[field])
-    return deviceEntry._doc[field];
-  return undefined;
+type FeedbackExportDoc = {
+  _id: unknown;
+  date: Date;
+  username?: string;
+  question?: string;
+  vote?: string;
+  questionsVote?: Array<{ question?: string; vote?: string } | null>;
+  devices?: unknown;
+  name?: string | null;
+  phone?: string | null;
+  email?: string | null;
+  comment?: string | null;
 };
-
-const safeDecrypt = (value: unknown) => {
-  if (value === null || typeof value === "undefined") return "";
-  if (typeof value !== "string") return value as any;
-  const decrypted = decrypt(value);
-  if (decrypted === null || decrypted === "[Decryption Error]") {
-    return value;
-  }
-  return decrypted;
-};
-
-function escapeCsvField(field: unknown): string {
-  if (field === null || typeof field === "undefined") {
-    return "";
-  }
-  let stringField = String(field);
-  if (
-    stringField.includes(",") ||
-    stringField.includes("\n") ||
-    stringField.includes('"')
-  ) {
-    stringField = '"' + stringField.replace(/"/g, '""') + '"';
-  }
-  return stringField;
-}
 
 export async function GET(request: NextRequest) {
   try {
@@ -86,24 +68,23 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     const startDateString = searchParams.get("startDate");
     const endDateString = searchParams.get("endDate");
-    const requestedFormat = (searchParams.get("format") || "csv").toLowerCase();
+    const format = parseExportFormat(searchParams.get("format"));
 
-    if (requestedFormat !== "csv" && requestedFormat !== "xlsx") {
+    if (!format) {
       return NextResponse.json(
         { success: false, message: "Invalid format. Use csv or xlsx." },
         { status: 400 }
       );
     }
 
-    const format = requestedFormat as "csv" | "xlsx";
+    // The same timezone drives BOTH the day boundaries of the query and the
+    // rendered Date/Time columns, so every exported row falls inside the
+    // requested calendar range as the user sees it.
+    const timezone = resolveTimezone(searchParams.get("timezone"));
 
-    const timezone = searchParams.get("timezone") || "UTC";
+    const startDate = parseDateStartOfDay(startDateString, timezone);
+    const endDate = parseDateEndOfDay(endDateString, timezone);
 
-    // Parse dates using utility functions
-    const startDate = parseDateStartOfDayUTC(startDateString);
-    const endDate = parseDateEndOfDayUTC(endDateString);
-
-    // Validate dates if provided
     if (startDateString && !startDate) {
       return NextResponse.json(
         { success: false, message: "Invalid startDate format." },
@@ -116,96 +97,96 @@ export async function GET(request: NextRequest) {
         { status: 400 }
       );
     }
-
-    type DateQuery = {
-      $gte?: Date;
-      $lte?: Date;
-    };
-
-    const matchQuery: { username: string; date?: DateQuery } = {
-      username: username.toLowerCase(),
-    };
-
-    if (startDate) {
-      matchQuery.date = { ...(matchQuery.date || {}), $gte: startDate };
-    }
-
-    if (endDate) {
-      matchQuery.date = { ...(matchQuery.date || {}), $lte: endDate };
-    }
-
-    const feedbackEntries = await Feedback.find(matchQuery)
-      .populate({
-        path: "devices",
-        model: Device,
-        select: "label location token",
-      })
-      .sort({ date: -1 })
-      .lean({ virtuals: true, getters: true });
-
-    const feedbackIds = feedbackEntries
-      .map((fb: any) => fb?._id)
-      .filter(Boolean)
-      .map((id: any) => String(id));
-
-    const devicesByFeedbackId = new Map<string, any[]>();
-    if (feedbackIds.length > 0) {
-      const feedbackDevices = await Feedback.find({
-        _id: { $in: feedbackIds },
-      })
-        .select("devices")
-        .lean();
-      feedbackDevices.forEach((fd: any) => {
-        if (!fd?._id || !Array.isArray(fd.devices)) return;
-        devicesByFeedbackId.set(String(fd._id), fd.devices);
-      });
-    }
-
-    const persistExportActivity = async (
-      status: "success" | "error",
-      message: string,
-      rowsOverride?: number
-    ) => {
-      try {
-        const totalRows =
-          typeof rowsOverride === "number"
-            ? rowsOverride
-            : feedbackEntries.length;
-        await logActivity({
-          account: username,
-          performedBy: login,
-          entityType: "export",
-          action: "votes",
-          status,
-          message,
-          metadata: {
-            exportType: "votes",
-            format,
-            startDate: startDateString,
-            endDate: endDateString,
-            totalRows,
-          },
-        });
-      } catch (logError) {
-        console.error("Failed to persist votes export log", logError);
-      }
-    };
-
-    if (feedbackEntries.length === 0) {
-      await persistExportActivity(
-        "error",
-        "No feedback entries found for the selected criteria to export as votes.",
-        0
-      );
+    if (startDate && endDate && startDate > endDate) {
       return NextResponse.json(
-        {
-          success: false,
-          message:
-            "No feedback entries found for the selected criteria to export as votes.",
-        },
-        { status: 404 }
+        { success: false, message: "startDate must not be after endDate." },
+        { status: 400 }
       );
     }
+
+    const filters = {
+      username,
+      startDate: startDate ?? undefined,
+      endDate: endDate ?? undefined,
+    };
+
+    // Devices are stored as embedded objects on the feedback document; read
+    // them raw (no populate) so the label/location captured at vote time are
+    // exported even if the device was later renamed or deleted.
+    const feedbackEntries = (await Feedback.find(
+      buildFeedbackMatchQuery(filters)
+    )
+      .collation(CASE_INSENSITIVE_COLLATION)
+      .sort({ date: -1 })
+      .lean()) as unknown as FeedbackExportDoc[];
+
+    // Fallback lookup for legacy rows that only stored device ids / tokens.
+    const deviceIds = new Set<string>();
+    const deviceTokens = new Set<string>();
+    const collectDeviceKeys = (devices: unknown) => {
+      toDevicesArray(devices).forEach((deviceEntry) => {
+        if (typeof deviceEntry === "string") {
+          deviceIds.add(deviceEntry);
+          deviceTokens.add(deviceEntry);
+        } else if (
+          deviceEntry &&
+          typeof deviceEntry === "object" &&
+          !extractDeviceField(deviceEntry, "label")
+        ) {
+          const id = (deviceEntry as { _id?: unknown })._id;
+          if (id) deviceIds.add(String(id));
+          const token = extractDeviceField(deviceEntry, "token");
+          if (token) deviceTokens.add(token);
+        }
+      });
+    };
+    feedbackEntries.forEach((entry) => collectDeviceKeys(entry.devices));
+
+    const deviceLookup = new Map<
+      string,
+      { label?: string; location?: string }
+    >();
+    if (deviceIds.size > 0 || deviceTokens.size > 0) {
+      const validIds = Array.from(deviceIds).filter((id) =>
+        /^[a-f\d]{24}$/i.test(id)
+      );
+      const orClauses: Record<string, unknown>[] = [];
+      if (validIds.length > 0) orClauses.push({ _id: { $in: validIds } });
+      if (deviceTokens.size > 0)
+        orClauses.push({ token: { $in: Array.from(deviceTokens) } });
+      if (orClauses.length > 0) {
+        const devices = await Device.find({ $or: orClauses })
+          .select("label location token")
+          .lean();
+        devices.forEach((device) => {
+          const info = { label: device.label, location: device.location };
+          deviceLookup.set(String(device._id), info);
+          if (device.token) deviceLookup.set(device.token, info);
+        });
+      }
+    }
+
+    const resolveDevice = (devices: unknown) => {
+      const primary = toDevicesArray(devices)[0];
+      const fromEmbedded = {
+        label: extractDeviceField(primary, "label"),
+        location: extractDeviceField(primary, "location"),
+      };
+      if (fromEmbedded.label || fromEmbedded.location) {
+        return {
+          label: fromEmbedded.label ?? "",
+          location: fromEmbedded.location ?? "",
+        };
+      }
+      const key =
+        typeof primary === "string"
+          ? primary
+          : (primary as { _id?: unknown } | undefined)?._id
+          ? String((primary as { _id?: unknown })._id)
+          : extractDeviceField(primary, "token");
+      const looked = key ? deviceLookup.get(key) : undefined;
+      return { label: looked?.label ?? "", location: looked?.location ?? "" };
+    };
 
     const headers = [
       "Date",
@@ -222,109 +203,101 @@ export async function GET(request: NextRequest) {
       "Comment",
     ];
 
-    const worksheetData: Array<Array<string | number>> = [headers];
-    let csvString = headers.join(",") + "\r\n";
+    const rows: Array<{ sortKey: number; values: Array<string | number> }> = [];
 
     for (const entry of feedbackEntries) {
       const entryDate = new Date(entry.date);
       const { datePart, timePart } = formatDateInTimezone(entryDate, timezone);
+      const device = resolveDevice(entry.devices);
 
-      const devicesArray = Array.isArray((entry as any).devices)
-        ? (entry as any).devices
-        : (entry as any).devices
-        ? [(entry as any).devices]
-        : [];
+      const name = safeDecrypt(entry.name);
+      const phone = safeDecrypt(entry.phone);
+      const email = safeDecrypt(entry.email);
+      const comment = safeDecrypt(entry.comment);
 
-      const storedDevices =
-        entry?._id && devicesByFeedbackId.get(String(entry._id))
-          ? devicesByFeedbackId.get(String(entry._id))
-          : [];
-
-      const primaryDeviceCandidate =
-        (Array.isArray(storedDevices) && storedDevices[0]) ||
-        (devicesArray.length > 0 ? devicesArray[0] : null);
-
-      const deviceLabel =
-        extractDeviceField(primaryDeviceCandidate, "label") ??
-        entry.device_label ??
-        "";
-      const deviceLocation =
-        extractDeviceField(primaryDeviceCandidate, "location") ??
-        entry.location ??
-        "";
-
-      const questionsList =
-        Array.isArray(entry.questionsVote) && entry.questionsVote.length > 0
-          ? entry.questionsVote
-          : [
-              {
-                question: entry.question,
-                vote: entry.vote,
-              },
-            ];
-
-      questionsList.forEach((q: any) => {
-        const rowValues = [
-          datePart,
-          timePart,
-          q?.vote ?? entry.vote,
-          translateVote(q?.vote ?? entry.vote),
-          `${q?.question || entry.question || "N/A"}`,
-          deviceLabel,
-          deviceLocation,
-          entry.username,
-          safeDecrypt(entry.name),
-          safeDecrypt(entry.phone),
-          safeDecrypt(entry.email),
-          safeDecrypt(entry.comment),
-        ].map((value) =>
-          value === null || typeof value === "undefined" ? "" : value
-        );
-
-        worksheetData.push(rowValues as Array<string | number>);
-        const csvRow = rowValues.map((value) => escapeCsvField(value));
-        csvString += csvRow.join(",") + "\r\n";
+      extractQuestionVoteItemsFromFeedback(entry).forEach((q) => {
+        const rawVote = q.vote ?? entry.vote ?? "";
+        rows.push({
+          sortKey: entryDate.getTime(),
+          values: [
+            datePart,
+            timePart,
+            rawVote,
+            translateVote(rawVote),
+            q.question || entry.question || "N/A",
+            device.label,
+            device.location,
+            entry.username ?? "",
+            name,
+            phone,
+            email,
+            comment,
+          ],
+        });
       });
+    }
+
+    rows.sort((a, b) => b.sortKey - a.sortKey);
+
+    const worksheetData: Array<Array<string | number>> = [
+      headers,
+      ...rows.map((row) => row.values),
+    ];
+    const totalRows = rows.length;
+
+    const persistExportActivity = async (
+      status: "success" | "error",
+      message: string
+    ) => {
+      try {
+        await logActivity({
+          account: username,
+          performedBy: login,
+          entityType: "export",
+          action: "votes",
+          status,
+          message,
+          metadata: {
+            exportType: "votes",
+            format,
+            startDate: startDateString,
+            endDate: endDateString,
+            timezone,
+            totalRows,
+            feedbackSessions: feedbackEntries.length,
+          },
+        });
+      } catch (logError) {
+        console.error("Failed to persist votes export log", logError);
+      }
+    };
+
+    if (totalRows === 0) {
+      await persistExportActivity(
+        "error",
+        "No votes found for the selected criteria."
+      );
+      return NextResponse.json(
+        {
+          success: false,
+          message:
+            "No feedback entries found for the selected criteria to export as votes.",
+        },
+        { status: 404 }
+      );
     }
 
     await persistExportActivity(
       "success",
-      `Exported ${feedbackEntries.length} vote rows as ${format.toUpperCase()}`
+      `Exported ${totalRows} vote rows (${feedbackEntries.length} feedback sessions) as ${format.toUpperCase()}`
     );
 
-    if (format === "xlsx") {
-      const workbook = XLSX.utils.book_new();
-      const worksheet = XLSX.utils.aoa_to_sheet(worksheetData);
-      XLSX.utils.book_append_sheet(workbook, worksheet, "Votes");
-      const buffer = XLSX.write(workbook, { bookType: "xlsx", type: "buffer" });
-
-      const responseHeaders = new Headers();
-      responseHeaders.set(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      );
-      responseHeaders.set(
-        "Content-Disposition",
-        'attachment; filename="votes_export.xlsx"'
-      );
-
-      return new NextResponse(buffer, {
-        status: 200,
-        headers: responseHeaders,
-      });
-    }
-
-    const responseHeaders = new Headers();
-    responseHeaders.set("Content-Type", "text/csv");
-    responseHeaders.set(
-      "Content-Disposition",
-      'attachment; filename="votes_export.csv"'
+    return buildExportResponse(
+      format,
+      worksheetData,
+      "votes_export",
+      "Votes"
     );
-
-    return new NextResponse(csvString, {
-      status: 200,
-      headers: responseHeaders,
-    });
   } catch (error) {
     console.error("Failed to export votes", error);
     return NextResponse.json(

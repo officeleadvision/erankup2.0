@@ -14,7 +14,10 @@ import {
 import { toast } from "react-toastify";
 import {
   buildTimezoneList,
+  DEFAULT_TIMEZONE,
+  formatDateInputBG,
   getUserTimezone,
+  toLocalDateInputValue,
   type TimezoneInfo,
 } from "@/lib/timezoneUtils";
 
@@ -25,17 +28,18 @@ function ExportPageContent() {
   const [isExporting, setIsExporting] = useState(false);
   const [format, setFormat] = useState<ExportFormat>("csv");
 
-  const today = new Date().toISOString().split("T")[0];
-  const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-    .toISOString()
-    .split("T")[0];
-
-  const [startDate, setStartDate] = useState(thirtyDaysAgo);
-  const [endDate, setEndDate] = useState(today);
+  // Local calendar dates (never toISOString(): that is the UTC date and is
+  // "yesterday" for the first hours of every day in Bulgaria).
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 30);
+    return toLocalDateInputValue(d);
+  });
+  const [endDate, setEndDate] = useState(() => toLocalDateInputValue());
 
   // Timezone state
   const [timezones, setTimezones] = useState<TimezoneInfo[]>([]);
-  const [selectedTimezone, setSelectedTimezone] = useState("Europe/Sofia");
+  const [selectedTimezone, setSelectedTimezone] = useState(DEFAULT_TIMEZONE);
   const [timezoneSearch, setTimezoneSearch] = useState("");
   const [isTimezoneDropdownOpen, setIsTimezoneDropdownOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -44,8 +48,7 @@ function ExportPageContent() {
   useEffect(() => {
     const tzList = buildTimezoneList();
     setTimezones(tzList);
-    // Detect user's timezone using utility function
-    const userTz = getUserTimezone("Europe/Sofia");
+    const userTz = getUserTimezone(DEFAULT_TIMEZONE);
     if (tzList.some((tz) => tz.name === userTz)) {
       setSelectedTimezone(userTz);
     }
@@ -77,7 +80,6 @@ function ExportPageContent() {
     );
   }, [timezones, timezoneSearch]);
 
-  // Get selected timezone info
   const selectedTimezoneInfo = useMemo(
     () => timezones.find((tz) => tz.name === selectedTimezone),
     [timezones, selectedTimezone]
@@ -100,32 +102,20 @@ function ExportPageContent() {
       toast.error("Моля, изберете начална и крайна дата.");
       return;
     }
-    if (new Date(startDate) > new Date(endDate)) {
+    if (startDate > endDate) {
       toast.error("Началната дата не може да бъде след крайната дата.");
       return;
     }
 
     setIsExporting(true);
 
-    // Debug: Log the actual dates being sent
-    console.log("[Export Frontend] Dates being sent:", {
+    const queryParams = new URLSearchParams({
       startDate,
       endDate,
-      selectedTimezone,
+      format: exportFormat,
+      timezone: selectedTimezone,
     });
-
-    const queryParams = new URLSearchParams();
-    if (startDate) {
-      queryParams.append("startDate", startDate);
-    }
-    if (endDate) {
-      queryParams.append("endDate", endDate);
-    }
-    queryParams.append("format", exportFormat);
-    queryParams.append("timezone", selectedTimezone);
     const urlWithParams = `/export/${type}?${queryParams.toString()}`;
-
-    console.log("[Export Frontend] Full URL:", urlWithParams);
 
     try {
       const responseType: "text" | "blob" =
@@ -175,8 +165,6 @@ function ExportPageContent() {
 
   return (
     <div className="space-y-8">
-      {/* Page Title is handled by DashboardLayout, uses "Експорт" */}
-
       {isAuthLoading && (
         <div
           className="p-4 text-sm text-blue-700 bg-blue-100 rounded-lg"
@@ -194,7 +182,7 @@ function ExportPageContent() {
         </h3>
         <p className="text-sm text-gray-500 mb-6">
           Изберете начална и крайна дата за данните, които искате да
-          експортирате.
+          експортирате. Дните се броят според избраната часова зона.
         </p>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-4">
           <div>
@@ -208,6 +196,7 @@ function ExportPageContent() {
               type="date"
               id="startDate"
               value={startDate}
+              max={endDate || undefined}
               onChange={(e) => setStartDate(e.target.value)}
               className="mt-1 text-gray-900 block w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow duration-150 ease-in-out hover:shadow-md"
             />
@@ -223,6 +212,7 @@ function ExportPageContent() {
               type="date"
               id="endDate"
               value={endDate}
+              min={startDate || undefined}
               onChange={(e) => setEndDate(e.target.value)}
               className="mt-1 text-gray-900 block w-full px-4 py-2.5 border border-gray-300 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow duration-150 ease-in-out hover:shadow-md"
             />
@@ -255,7 +245,10 @@ function ExportPageContent() {
               Часова зона
             </label>
             <button
+              id="timezone"
               type="button"
+              aria-haspopup="listbox"
+              aria-expanded={isTimezoneDropdownOpen}
               onClick={() => setIsTimezoneDropdownOpen(!isTimezoneDropdownOpen)}
               className="mt-1 relative w-full cursor-pointer rounded-lg bg-white py-2.5 pl-4 pr-10 text-left border border-gray-300 shadow-sm focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm transition-shadow duration-150 ease-in-out hover:shadow-md"
             >
@@ -286,7 +279,7 @@ function ExportPageContent() {
                     autoFocus
                   />
                 </div>
-                <ul className="max-h-60 overflow-auto py-1">
+                <ul role="listbox" className="max-h-60 overflow-auto py-1">
                   {filteredTimezones.length === 0 ? (
                     <li className="px-4 py-2 text-sm text-gray-500">
                       Няма намерени часови зони
@@ -295,6 +288,8 @@ function ExportPageContent() {
                     filteredTimezones.map((tz) => (
                       <li
                         key={tz.name}
+                        role="option"
+                        aria-selected={selectedTimezone === tz.name}
                         onClick={() => {
                           setSelectedTimezone(tz.name);
                           setIsTimezoneDropdownOpen(false);
@@ -333,19 +328,11 @@ function ExportPageContent() {
             <p className="text-sm text-indigo-700">
               <strong>Ще бъде експортирано за периода:</strong>{" "}
               <span className="text-indigo-900 font-semibold">
-                {new Date(startDate + "T00:00:00").toLocaleDateString("bg-BG", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
+                {formatDateInputBG(startDate)} 00:00
               </span>{" "}
               до{" "}
               <span className="text-indigo-900 font-semibold">
-                {new Date(endDate + "T00:00:00").toLocaleDateString("bg-BG", {
-                  day: "2-digit",
-                  month: "2-digit",
-                  year: "numeric",
-                })}
+                {formatDateInputBG(endDate)} 23:59
               </span>
             </p>
             <p className="text-xs text-indigo-600 mt-1">
@@ -365,7 +352,7 @@ function ExportPageContent() {
           </div>
           <p className="text-sm text-green-50 mb-6">
             Изтеглете {format === "csv" ? "CSV" : "XLSX"} файл с всички гласове
-            в избрания период.
+            в избрания период (по един ред за всеки отговорен въпрос).
           </p>
           <button
             onClick={() => handleExport("votes", format)}
@@ -386,7 +373,7 @@ function ExportPageContent() {
           </div>
           <p className="text-sm text-blue-50 mb-6">
             Изтеглете {format === "csv" ? "CSV" : "XLSX"} файл с всички отзиви в
-            избрания период.
+            избрания период (по един ред за всеки отзив).
           </p>
           <button
             onClick={() => handleExport("feedback", format)}

@@ -20,7 +20,7 @@ export interface IFeedback extends Document {
   date: Date;
   username: string;
   question: string;
-  devices: mongoose.Types.ObjectId[] | IDevice[] | any[];
+  devices: Array<mongoose.Types.ObjectId | IDevice | Record<string, unknown> | string>;
   questionsVote?: IQuestionVote[];
   questionsVoteToString?: string;
   vote?: VoteType;

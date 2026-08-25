@@ -1,14 +1,13 @@
 import mongoose from "mongoose";
 
-// Add mongoose to the NodeJS global type
+type MongooseCache = {
+  conn: typeof mongoose | null;
+  promise: Promise<typeof mongoose> | null;
+};
+
 declare global {
   // eslint-disable-next-line no-var
-  var mongoose:
-    | {
-        conn: typeof mongoose | null;
-        promise: Promise<typeof mongoose> | null;
-      }
-    | undefined;
+  var mongooseCache: MongooseCache | undefined;
 }
 
 const MONGODB_URI = process.env.MONGODB_URI;
@@ -20,34 +19,30 @@ if (!MONGODB_URI) {
 }
 
 /**
- * Global is used here to maintain a cached connection across hot reloads
- * in development. This prevents connections from growing exponentially
- * during API Route usage.
+ * Cached connection across hot reloads in development and across invocations
+ * of a warm serverless instance in production.
  */
-// @ts-ignore
-const cached = global.mongoose || { conn: null, promise: null };
+const cached: MongooseCache = global.mongooseCache ?? {
+  conn: null,
+  promise: null,
+};
+global.mongooseCache = cached;
 
-// For development mode, we want to persist the connection in the global object
-if (!global.mongoose) {
-  // @ts-ignore
-  global.mongoose = cached;
-}
-
-async function dbConnect() {
+async function dbConnect(): Promise<typeof mongoose> {
   if (cached.conn) {
     return cached.conn;
   }
 
   if (!cached.promise) {
-    const opts = {
-      bufferCommands: false,
-    };
-
-    // @ts-ignore
-    cached.promise = mongoose.connect(MONGODB_URI!, opts).then((mongoose) => {
-      return mongoose;
-    });
+    cached.promise = mongoose
+      .connect(MONGODB_URI as string, { bufferCommands: false })
+      .catch((error) => {
+        // Allow a retry on the next request instead of caching the rejection.
+        cached.promise = null;
+        throw error;
+      });
   }
+
   cached.conn = await cached.promise;
   return cached.conn;
 }

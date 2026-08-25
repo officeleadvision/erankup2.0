@@ -106,7 +106,7 @@ export async function POST(request: Request) {
       message: "Успешен вход",
       token,
     });
-  } catch (_error) {
+  } catch {
     return NextResponse.json(
       { success: false, message: "Вътрешна сървърна грешка" },
       { status: 500 }

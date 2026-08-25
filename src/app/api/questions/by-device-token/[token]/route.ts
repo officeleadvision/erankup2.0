@@ -3,13 +3,16 @@ import dbConnect from "@/lib/mongodb";
 import Question from "@/models/Question";
 import Device from "@/models/Device";
 
+/**
+ * Public endpoint used by the tablets. Intentionally unauthenticated.
+ */
 export async function GET(
-  request: NextRequest,
-  { params }: { params: { token: string } }
+  _request: NextRequest,
+  { params }: { params: Promise<{ token: string }> }
 ) {
   try {
     await dbConnect();
-    const { token: deviceToken } = params;
+    const { token: deviceToken } = await params;
 
     if (!deviceToken) {
       return NextResponse.json(
@@ -32,7 +35,7 @@ export async function GET(
       hidden: false,
       username: device.owner,
     })
-      .sort({ date: -1 })
+      .sort({ order: 1, date: -1 })
       .select("question");
 
     if (!question) {
@@ -50,12 +53,9 @@ export async function GET(
       { status: 200 }
     );
   } catch (error) {
-    let errorMessage = "Error fetching question by device token";
-    if (error instanceof Error) {
-      errorMessage = error.message;
-    }
+    console.error("GET /api/questions/by-device-token failed", error);
     return NextResponse.json(
-      { success: false, message: errorMessage },
+      { success: false, message: "Error fetching question by device token" },
       { status: 500 }
     );
   }
