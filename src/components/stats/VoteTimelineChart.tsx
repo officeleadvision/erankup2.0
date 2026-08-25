@@ -3,6 +3,8 @@
 import React from "react";
 import {
   Chart as ChartJS,
+  BarController,
+  LineController,
   CategoryScale,
   LinearScale,
   BarElement,
@@ -20,7 +22,14 @@ import "chartjs-adapter-date-fns";
 import ChartDataLabels from "chartjs-plugin-datalabels";
 import { getVoteTypeDetails } from "@/lib/chartUtils";
 
+// The generic <Chart> component does NOT register controllers (react-chartjs-2
+// only does that for its typed <Bar>/<Line>/<Pie> wrappers). Registering them
+// explicitly is required: in a production build the unused typed exports are
+// tree-shaken away, so without this a line dataset throws at runtime
+// ('"line" is not a registered controller') even though dev works fine.
 ChartJS.register(
+  BarController,
+  LineController,
   CategoryScale,
   LinearScale,
   BarElement,
