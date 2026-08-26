@@ -320,17 +320,13 @@ function QuestionsPageContent() {
         </h2>
         {visibleQuestions.length > 0 ? (
           <div className="overflow-hidden">
-            <div className="hidden md:flex w-full bg-slate-50 border-b border-slate-200">
-              <div className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider w-2/5">
-                Въпрос (Плъзнете за пренареждане)
-              </div>
-              <div className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider flex-1 md:flex md:justify-between">
-                <span className="w-1/5">Дата</span>
-                <span className="w-1/5 text-center">Поредност</span>
-                <span className="w-1/5 text-center">Видимост</span>
-                <span className="w-1/5">Устройства</span>
-                <span className="w-1/5 text-right">Действия</span>
-              </div>
+            <div className="q-row hidden bg-slate-50 border-b border-slate-200 px-4 py-3 text-xs font-medium uppercase tracking-wider text-slate-600 md:grid">
+              <span>Въпрос (плъзнете за пренареждане)</span>
+              <span className="text-center">Дата</span>
+              <span className="text-center">Поредност</span>
+              <span className="text-center">Видимост</span>
+              <span className="text-center">Устройства</span>
+              <span className="text-right">Действия</span>
             </div>
 
             <div className="md:hidden w-full bg-slate-50 border-b border-slate-200 px-3 py-2">
@@ -377,17 +373,13 @@ function QuestionsPageContent() {
             Скрити Въпроси
           </h2>
           <div className="overflow-hidden">
-            <div className="hidden md:flex w-full bg-slate-50 border-b border-slate-200">
-              <div className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider w-2/5">
-                Въпрос
-              </div>
-              <div className="px-4 py-3 text-left text-xs font-medium text-slate-600 uppercase tracking-wider flex-1 md:flex md:justify-between">
-                <span className="w-1/5">Дата на скриване</span>
-                <span className="w-1/5 text-center">Поредност (бивша)</span>
-                <span className="w-1/5 text-center">Видимост</span>
-                <span className="w-1/5">Устройства</span>
-                <span className="w-1/5 text-right">Действия</span>
-              </div>
+            <div className="q-row hidden bg-slate-50 border-b border-slate-200 px-4 py-3 text-xs font-medium uppercase leading-tight tracking-wider text-slate-600 md:grid">
+              <span>Въпрос</span>
+              <span className="text-center">Дата на скриване</span>
+              <span className="text-center">Поредност</span>
+              <span className="text-center">Видимост</span>
+              <span className="text-center">Устройства</span>
+              <span className="text-right">Действия</span>
             </div>
 
             <div className="md:hidden w-full bg-slate-50 border-b border-slate-200 px-3 py-2">

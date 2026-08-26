@@ -34,12 +34,10 @@ const SummaryCard: React.FC<{
       className={`stat-card p-4 md:p-6 rounded-xl ${bgColorClass} ${textColorClass}`}
       style={style}
     >
-      <h3 className="text-sm md:text-md font-semibold text-gray-200">
-        {title}
-      </h3>
+      <h3 className="text-sm md:text-md font-semibold opacity-90">{title}</h3>
       <p className="text-2xl md:text-3xl font-bold">{value}</p>
       {percentage && (
-        <p className="text-xs md:text-sm text-gray-100">{percentage}</p>
+        <p className="text-xs md:text-sm opacity-80">{percentage}</p>
       )}
     </div>
   );

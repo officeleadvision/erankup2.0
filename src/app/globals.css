@@ -265,3 +265,30 @@ body {
     background: #3730a3;
   }
 }
+
+/* --- Questions list ------------------------------------------------------
+   The header and every row use this one grid, so the columns can never drift
+   apart (they used to be independent flex widths, which is why a long
+   question ran into the date). The question column is the only flexible one
+   and is min-width:0 so its text wraps/clamps instead of pushing the rest
+   of the row out of alignment. */
+.q-row {
+  display: grid;
+  grid-template-columns:
+    minmax(0, 1fr) /* question */
+    7.5rem /* date */
+    6rem /* order */
+    6rem /* visibility */
+    6.5rem /* devices */
+    5.5rem; /* actions */
+  align-items: center;
+  gap: 0.75rem;
+}
+
+@media (max-width: 767px) {
+  .q-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.25rem;
+    align-items: start;
+  }
+}
