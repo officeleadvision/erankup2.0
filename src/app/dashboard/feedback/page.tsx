@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, useMemo } from "react";
+import { Suspense, useEffect, useState, useCallback, useMemo } from "react";
+import { useSearchParams } from "next/navigation";
 import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
 import apiClient from "@/lib/apiClient";
@@ -12,6 +13,7 @@ import {
   getUserTimezone,
   toLocalDateInputValue,
 } from "@/lib/timezoneUtils";
+import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
 
 const voteScoreMap: Record<string, number> = {
   superdislike: 1,
@@ -97,13 +99,22 @@ function FeedbackPageContent() {
 
   // Local calendar dates + the browser timezone, so "today" is really today
   // and the day boundaries match the dashboard/export views.
+  const searchParams = useSearchParams();
   const [timezone] = useState(() => getUserTimezone());
+  // The statistics chart links here with a date (and optionally a vote type).
   const [startDate, setStartDate] = useState(() => {
+    const fromUrl = searchParams.get("startDate");
+    if (fromUrl) return fromUrl;
     const d = new Date();
     d.setDate(d.getDate() - 30);
     return toLocalDateInputValue(d);
   });
-  const [endDate, setEndDate] = useState(() => toLocalDateInputValue());
+  const [endDate, setEndDate] = useState(
+    () => searchParams.get("endDate") || toLocalDateInputValue()
+  );
+  const [voteFilter, setVoteFilter] = useState(
+    () => searchParams.get("vote") || ""
+  );
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(0);
 
@@ -115,6 +126,7 @@ function FeedbackPageContent() {
       if (startDate) params.append("startDate", startDate);
       if (endDate) params.append("endDate", endDate);
       params.append("timezone", timezone);
+      if (voteFilter) params.append("vote", voteFilter);
       params.append("page", currentPage.toString());
       params.append("limit", ITEMS_PER_PAGE.toString());
 
@@ -144,7 +156,7 @@ function FeedbackPageContent() {
           setIsLoading(false);
         });
     }
-  }, [token, startDate, endDate, currentPage, timezone]);
+  }, [token, startDate, endDate, currentPage, timezone, voteFilter]);
 
   useEffect(() => {
     fetchFeedback();
@@ -173,14 +185,24 @@ function FeedbackPageContent() {
     let totalScore = 0;
     let totalCount = 0;
 
+    // Count individual ANSWERS, not sessions: one submission that answered
+    // three questions is three votes. This is the unit the statistics chart
+    // and both exports use, so the numbers reconcile across the dashboard.
     feedbackList.forEach((item) => {
-      const voteKey = (item.vote || "").toLowerCase();
-      const voteScore = getVoteScore(item.vote);
-      if (voteScore !== null && voteKey in counts) {
-        counts[voteKey] += 1;
-        totalScore += voteScore;
-        totalCount += 1;
-      }
+      const answers =
+        Array.isArray(item.questionsVote) && item.questionsVote.length > 0
+          ? item.questionsVote.map((entry) => entry?.vote)
+          : [item.vote];
+
+      answers.forEach((vote) => {
+        const voteKey = (vote || "").toLowerCase();
+        const voteScore = getVoteScore(vote);
+        if (voteScore !== null && voteKey in counts) {
+          counts[voteKey] += 1;
+          totalScore += voteScore;
+          totalCount += 1;
+        }
+      });
     });
 
     const average = totalCount > 0 ? totalScore / totalCount : null;
@@ -188,6 +210,7 @@ function FeedbackPageContent() {
     return {
       counts,
       totalCount,
+      sessionCount: feedbackList.length,
       totalScore,
       average,
       label: describeAverage(average),
@@ -253,6 +276,45 @@ function FeedbackPageContent() {
             Зареди отново
           </button>
         </div>
+
+        <div className="mt-5 pt-4 border-t border-slate-100">
+          <p className="text-sm font-medium text-slate-600 mb-2">
+            Филтриране по оценка
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              aria-pressed={voteFilter === ""}
+              onClick={() => {
+                setCurrentPage(1);
+                setVoteFilter("");
+              }}
+              className="mchip"
+              style={{ "--chip": "#334155" } as React.CSSProperties}
+            >
+              Всички
+            </button>
+            {VOTE_TYPE_ORDER.map((type) => {
+              const details = getVoteTypeDetails(type);
+              return (
+                <button
+                  key={type}
+                  type="button"
+                  aria-pressed={voteFilter === type}
+                  onClick={() => {
+                    setCurrentPage(1);
+                    setVoteFilter(voteFilter === type ? "" : type);
+                  }}
+                  className="mchip"
+                  style={{ "--chip": details.color } as React.CSSProperties}
+                >
+                  <span className="chip-dot" aria-hidden="true" />
+                  {details.label}
+                </button>
+              );
+            })}
+          </div>
+        </div>
       </div>
 
       {!isLoading && feedbackSummary.totalCount > 0 && (
@@ -286,8 +348,15 @@ function FeedbackPageContent() {
             <p className="mt-2 text-3xl font-semibold text-slate-800">
               {feedbackSummary.totalCount}
             </p>
+            <p className="mt-1 text-sm text-slate-600">
+              от {feedbackSummary.sessionCount}{" "}
+              {feedbackSummary.sessionCount === 1 ? "отзив" : "отзива"} на тази
+              страница
+            </p>
             <p className="mt-4 text-xs text-slate-400">
-              Брой валидни отговори със стойности за „Общо усещане“.
+              Един отзив съдържа по един глас за всеки въпрос, на който е
+              отговорено — затова графиката показва повече гласове от броя
+              отзиви.
             </p>
           </div>
 
@@ -626,7 +695,15 @@ export default function FeedbackPage() {
   return (
     <AuthGuard>
       <DashboardLayout>
-        <FeedbackPageContent />
+        <Suspense
+          fallback={
+            <div className="flex justify-center items-center h-64">
+              <Loader text="Зареждане на отзиви..." />
+            </div>
+          }
+        >
+          <FeedbackPageContent />
+        </Suspense>
       </DashboardLayout>
     </AuthGuard>
   );

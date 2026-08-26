@@ -31,7 +31,7 @@ const SummaryCard: React.FC<{
 }) => {
   return (
     <div
-      className={`p-4 md:p-6 rounded-lg shadow-lg ${bgColorClass} ${textColorClass}`}
+      className={`stat-card p-4 md:p-6 rounded-xl ${bgColorClass} ${textColorClass}`}
       style={style}
     >
       <h3 className="text-sm md:text-md font-semibold text-gray-200">
@@ -95,10 +95,8 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary, isLoading }) => {
       title: details.label,
       value: count,
       percentage: `${percentage}%`,
-      bgColorClass: details.color.startsWith("#") ? "" : details.color,
-      style: details.color.startsWith("#")
-        ? { backgroundColor: details.backgroundColor }
-        : {},
+      bgColorClass: "",
+      style: { "--chip": details.color } as React.CSSProperties,
       textColorClass:
         details.color === "#FFEE58" ? "text-gray-800" : "text-white",
     };
@@ -109,13 +107,15 @@ const SummaryCards: React.FC<SummaryCardsProps> = ({ summary, isLoading }) => {
       <SummaryCard
         title="Общо гласове"
         value={totalVotesCard}
-        bgColorClass="bg-blue-500"
+        bgColorClass=""
+        style={{ "--chip": "#3b82f6" } as React.CSSProperties}
       />
       <SummaryCard
         title="Средно усещане"
         value={averageScoreDisplay}
         percentage={averageLabel}
-        bgColorClass="bg-indigo-500"
+        bgColorClass=""
+        style={{ "--chip": "#6366f1" } as React.CSSProperties}
       />
       {cardsData.map((card) => (
         <SummaryCard

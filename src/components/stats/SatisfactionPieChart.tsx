@@ -7,6 +7,8 @@ import {
   Legend,
   Title,
   type TooltipItem,
+  type ChartEvent,
+  type ActiveElement,
 } from "chart.js";
 import type { Context as DataLabelsContext } from "chartjs-plugin-datalabels";
 import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
@@ -25,11 +27,14 @@ interface VoteSummary {
 interface SatisfactionPieChartProps {
   summary: VoteSummary | null;
   isLoading: boolean;
+  /** Called with the vote type of the clicked slice (drill-down). */
+  onVoteSelect?: (voteType: string) => void;
 }
 
 const SatisfactionPieChart: React.FC<SatisfactionPieChartProps> = ({
   summary,
   isLoading,
+  onVoteSelect,
 }) => {
   if (isLoading) {
     return (
@@ -84,6 +89,18 @@ const SatisfactionPieChart: React.FC<SatisfactionPieChartProps> = ({
   const options = {
     responsive: true,
     maintainAspectRatio: false,
+    onHover: (event: ChartEvent, elements: ActiveElement[]) => {
+      const target = event.native?.target as HTMLElement | undefined;
+      if (target && onVoteSelect) {
+        target.style.cursor = elements.length > 0 ? "pointer" : "default";
+      }
+    },
+    onClick: (_event: ChartEvent, elements: ActiveElement[]) => {
+      if (!onVoteSelect || elements.length === 0) return;
+      // Slices are rendered in VOTE_TYPE_ORDER, so the index is the vote type.
+      const voteType = VOTE_TYPE_ORDER[elements[0].index];
+      if (voteType) onVoteSelect(voteType);
+    },
     plugins: {
       legend: {
         position: "top" as const,

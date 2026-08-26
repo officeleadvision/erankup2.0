@@ -9,6 +9,8 @@ import {
   Tooltip,
   Legend,
   type TooltipItem,
+  type ChartEvent,
+  type ActiveElement,
 } from "chart.js";
 import { getVoteTypeDetails, VOTE_TYPE_ORDER } from "@/lib/chartUtils";
 import ChartDataLabels from "chartjs-plugin-datalabels";
@@ -34,11 +36,14 @@ interface VoteSummary {
 interface SatisfactionBarChartProps {
   summary: VoteSummary | null;
   isLoading: boolean;
+  /** Called with the vote type of the clicked bar (drill-down). */
+  onVoteSelect?: (voteType: string) => void;
 }
 
 const SatisfactionBarChart: React.FC<SatisfactionBarChartProps> = ({
   summary,
   isLoading,
+  onVoteSelect,
 }) => {
   if (isLoading) {
     return (
@@ -94,6 +99,18 @@ const SatisfactionBarChart: React.FC<SatisfactionBarChartProps> = ({
     indexAxis: "x" as const,
     responsive: true,
     maintainAspectRatio: false,
+    onHover: (event: ChartEvent, elements: ActiveElement[]) => {
+      const target = event.native?.target as HTMLElement | undefined;
+      if (target && onVoteSelect) {
+        target.style.cursor = elements.length > 0 ? "pointer" : "default";
+      }
+    },
+    onClick: (_event: ChartEvent, elements: ActiveElement[]) => {
+      if (!onVoteSelect || elements.length === 0) return;
+      // Bars are rendered in VOTE_TYPE_ORDER, so the index is the vote type.
+      const voteType = VOTE_TYPE_ORDER[elements[0].index];
+      if (voteType) onVoteSelect(voteType);
+    },
     scales: {
       y: {
         beginAtZero: true,

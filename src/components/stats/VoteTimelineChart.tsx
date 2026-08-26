@@ -55,6 +55,8 @@ interface VoteTimelineChartProps {
   selectedTypes?: string[];
   /** Show the totals columns. */
   showTotals?: boolean;
+  /** Called when a column or a line point is clicked (drill-down). */
+  onPointSelect?: (payload: { date: Date; voteType?: string }) => void;
 }
 
 const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
@@ -62,6 +64,7 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
   groupBy,
   selectedTypes = [],
   showTotals = true,
+  onPointSelect,
 }) => {
   // The API buckets by wall-clock components in the browser's own timezone
   // (we send it along), so build LOCAL dates here: the axis then shows the
@@ -111,6 +114,7 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
         const details = getVoteTypeDetails(type);
         return {
           type: "line" as const,
+          voteKey: type,
           label: details.label,
           data: timelineData.map((point) => point.byType?.[type] ?? 0),
           borderColor: details.color,
@@ -156,6 +160,38 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
     responsive: true,
     maintainAspectRatio: false,
     interaction: { mode: "index", intersect: false },
+    onHover: (event, elements) => {
+      const target = event.native?.target as HTMLElement | undefined;
+      if (target && onPointSelect) {
+        target.style.cursor = elements.length > 0 ? "pointer" : "default";
+      }
+    },
+    onClick: (event, _elements, chart) => {
+      if (!onPointSelect || !event.native) return;
+      // Prefer an exact hit (a line point or a column); fall back to the
+      // nearest column of the hovered bucket so the whole bar area is usable.
+      const hits = chart.getElementsAtEventForMode(
+        event.native,
+        "nearest",
+        { intersect: true },
+        true
+      );
+      const picked = hits.length
+        ? hits[0]
+        : chart.getElementsAtEventForMode(
+            event.native,
+            "index",
+            { intersect: false },
+            true
+          )[0];
+      if (!picked) return;
+      const date = labels[picked.index];
+      if (!date) return;
+      const dataset = chart.data.datasets[picked.datasetIndex] as
+        | { voteKey?: string }
+        | undefined;
+      onPointSelect({ date, voteType: dataset?.voteKey });
+    },
     plugins: {
       legend: {
         display: selectedTypes.length > 0 || !showTotals,

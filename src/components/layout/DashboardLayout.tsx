@@ -92,11 +92,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
   return (
     <div className="min-h-screen flex">
       <div
-        className={`w-64 bg-slate-800 text-slate-100 flex flex-col shadow-lg h-screen overflow-y-auto fixed top-0 left-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${
+        className={`w-64 sidebar-premium text-slate-100 flex flex-col shadow-xl h-screen overflow-y-auto fixed top-0 left-0 z-50 transition-transform duration-300 ease-in-out md:translate-x-0 ${
           isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
-        <div className="p-4 border-b border-slate-700 flex items-center justify-between">
+        <div className="p-4 border-b border-white/10 flex items-center justify-between">
           <Link href="/dashboard" className="flex items-center space-x-2">
             <Image
               src="/logo.png"
@@ -124,8 +124,8 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
               className={`group flex items-center px-3 py-2.5 text-sm font-medium rounded-md transition-all duration-150 ease-in-out ${
                 pathname === item.href ||
                 (item.href !== "/dashboard" && pathname.startsWith(item.href))
-                  ? "bg-indigo-600 text-white shadow-md"
-                  : "text-slate-300 hover:bg-slate-700 hover:text-white"
+                  ? "sidebar-link-active text-white"
+                  : "text-slate-300 hover:bg-white/10 hover:text-white"
               }`}
             >
               <item.icon
@@ -141,11 +141,11 @@ export default function DashboardLayout({ children }: DashboardLayoutProps) {
           ))}
         </nav>
         {username && (
-          <div className="px-2 py-3 border-t border-slate-700">
+          <div className="px-2 py-3 border-t border-white/10">
             <Link
               href="/profile"
               onClick={() => isMobileMenuOpen && setIsMobileMenuOpen(false)}
-              className="block px-2 py-2 rounded-md hover:bg-slate-700 group"
+              className="block px-2 py-2 rounded-md hover:bg-white/10 group"
             >
               <div className="flex items-center">
                 <UserCircleIcon className="h-8 w-8 text-indigo-400 mr-3" />

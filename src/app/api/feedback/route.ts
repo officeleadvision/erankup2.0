@@ -12,6 +12,7 @@ import {
   resolveTimezone,
 } from "@/lib/timezoneUtils";
 import {
+  allowedVotes,
   buildFeedbackMatchQuery,
   CASE_INSENSITIVE_COLLATION,
 } from "@/lib/voteAggregation";
@@ -235,11 +236,27 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const matchQuery = buildFeedbackMatchQuery({
+    const matchQuery: Record<string, unknown> = buildFeedbackMatchQuery({
       username,
       startDate: startDate ?? undefined,
       endDate: endDate ?? undefined,
     });
+
+    // Optional vote filter: a session matches when either its overall vote or
+    // any of its per-question answers is of that type.
+    const voteParam = (searchParams.get("vote") || "").toLowerCase();
+    if (voteParam) {
+      if (!allowedVotes.includes(voteParam as (typeof allowedVotes)[number])) {
+        return NextResponse.json(
+          { success: false, message: "Invalid vote type." },
+          { status: 400 }
+        );
+      }
+      matchQuery.$or = [
+        { vote: voteParam },
+        { "questionsVote.vote": voteParam },
+      ];
+    }
 
     const totalFeedback = await Feedback.countDocuments(matchQuery, {
       collation: CASE_INSENSITIVE_COLLATION,
@@ -260,6 +277,7 @@ export async function GET(request: NextRequest) {
         currentPage: page,
         totalFeedback,
         timezone,
+        vote: voteParam || undefined,
       },
       { status: 200 }
     );

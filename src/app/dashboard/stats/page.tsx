@@ -3,6 +3,7 @@
 import React, { useEffect, useState, FormEvent, useCallback } from "react";
 import AuthGuard from "@/components/auth/AuthGuard";
 import DashboardLayout from "@/components/layout/DashboardLayout";
+import { useRouter } from "next/navigation";
 import apiClient from "@/lib/apiClient";
 import { useAuth } from "@/contexts/AuthContext";
 import VoteTimelineChart from "@/components/stats/VoteTimelineChart";
@@ -37,6 +38,9 @@ interface VoteTimelineData {
   success?: boolean;
 }
 
+/** Accent of the totals columns; matches the bar fill in VoteTimelineChart. */
+const TOTALS_COLOR = "#14b8a6";
+
 type Period = "day" | "week" | "month" | "year" | "all" | "custom";
 type GroupBy = "day" | "hour" | "month";
 
@@ -52,6 +56,7 @@ const defaultRange = () => {
 
 function StatsPageContent() {
   const { token } = useAuth();
+  const router = useRouter();
   const [summary, setSummary] = useState<VoteSummary | null>(null);
   const [timelineData, setTimelineData] = useState<VoteTimelineData | null>(
     null
@@ -69,16 +74,22 @@ function StatsPageContent() {
   const [endDate, setEndDate] = useState(initialEnd);
   const [activePeriod, setActivePeriod] = useState<Period>("week");
   const [timelineGroupBy, setTimelineGroupBy] = useState<GroupBy>("day");
-  // Columns = totals (on by default); vote-type lines are opt-in.
+  // Columns = totals (always available); the vote-type lines are preselected
+  // from the data of the current range, until the user picks their own set.
   const [showTotals, setShowTotals] = useState(true);
   const [selectedTypes, setSelectedTypes] = useState<string[]>([]);
+  const [autoSelectTypes, setAutoSelectTypes] = useState(true);
   const allTypesSelected = selectedTypes.length === VOTE_TYPE_ORDER.length;
-  const toggleType = (type: string) =>
+  const toggleType = (type: string) => {
+    setAutoSelectTypes(false);
     setSelectedTypes((prev) =>
       prev.includes(type) ? prev.filter((t) => t !== type) : [...prev, type]
     );
-  const toggleAllTypes = () =>
+  };
+  const toggleAllTypes = () => {
+    setAutoSelectTypes(false);
     setSelectedTypes(allTypesSelected ? [] : [...VOTE_TYPE_ORDER]);
+  };
 
   const fetchVoteSummary = useCallback(async () => {
     if (!token) return;
@@ -125,6 +136,14 @@ function StatsPageContent() {
         { token }
       );
       setTimelineData(data);
+      if (autoSelectTypes) {
+        // Preselect only the vote types that actually occur in this range, in
+        // the canonical order, so the chart opens on the relevant lines.
+        const present = VOTE_TYPE_ORDER.filter((type) =>
+          (data.timeline || []).some((point) => (point.byType?.[type] ?? 0) > 0)
+        );
+        setSelectedTypes(present);
+      }
       if (effectiveGroupBy !== timelineGroupBy) {
         setTimelineGroupBy(effectiveGroupBy);
       }
@@ -137,7 +156,7 @@ function StatsPageContent() {
       setTimelineData(null);
     }
     setIsLoadingTimeline(false);
-  }, [token, startDate, endDate, timelineGroupBy, timezone]);
+  }, [token, startDate, endDate, timelineGroupBy, timezone, autoSelectTypes]);
 
   useEffect(() => {
     fetchVoteSummary();
@@ -149,6 +168,7 @@ function StatsPageContent() {
 
   const handlePeriodChange = (period: Period) => {
     setActivePeriod(period);
+    setAutoSelectTypes(true);
     const now = new Date();
     let newStartDate = new Date(now);
     let newGroupBy: GroupBy = "day";
@@ -191,10 +211,54 @@ function StatsPageContent() {
       return;
     }
     setActivePeriod("custom");
+    setAutoSelectTypes(true);
     setTimelineGroupBy(startDate === endDate ? "hour" : "day");
     fetchVoteSummary();
     fetchVoteTimeline();
   };
+
+  // Every chart drills down into the matching feedback entries.
+  const openFeedback = (
+    rangeStart: string,
+    rangeEnd: string,
+    voteType?: string
+  ) => {
+    const params = new URLSearchParams({
+      startDate: rangeStart,
+      endDate: rangeEnd,
+    });
+    if (voteType) params.set("vote", voteType);
+    router.push(`/dashboard/feedback?${params.toString()}`);
+  };
+
+  // A column or a line point drills down to that bucket's date range.
+  const handlePointSelect = ({
+    date,
+    voteType,
+  }: {
+    date: Date;
+    voteType?: string;
+  }) => {
+    const today = new Date();
+    let rangeStart = date;
+    let rangeEnd = date;
+
+    if (timelineGroupBy === "month") {
+      rangeStart = new Date(date.getFullYear(), date.getMonth(), 1);
+      rangeEnd = new Date(date.getFullYear(), date.getMonth() + 1, 0);
+    }
+    if (rangeEnd > today) rangeEnd = today;
+
+    openFeedback(
+      toLocalDateInputValue(rangeStart),
+      toLocalDateInputValue(rangeEnd),
+      voteType
+    );
+  };
+
+  // The satisfaction charts have no time axis, so they use the whole period.
+  const handleVoteSelect = (voteType: string) =>
+    openFeedback(startDate, endDate, voteType);
 
   const periodLabel = (
     <>
@@ -261,95 +325,83 @@ function StatsPageContent() {
         </button>
       </form>
 
-      <div className="mb-8 p-4 bg-white shadow-md rounded-lg">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-4">
-          <div>
-            <h3 className="text-xl font-semibold text-slate-700">
-              Активност (Трафик)
-            </h3>
-            <p className="text-sm text-slate-500">{periodLabel}</p>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Часова зона: {timezone.replace(/_/g, " ")}
-            </p>
+      <div className="mb-8 bg-white shadow-md rounded-2xl overflow-hidden">
+        <div className="chrome-band px-4 pt-4 pb-5 md:px-6">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+            <div>
+              <h3 className="text-xl font-semibold text-slate-800 tracking-[-0.01em]">
+                Активност (Трафик)
+              </h3>
+              <p className="text-sm text-slate-500 mt-0.5">{periodLabel}</p>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Часова зона: {timezone.replace(/_/g, " ")} · кликнете върху
+                колона или точка, за да видите отзивите
+              </p>
+            </div>
+            <div className="seg" role="group" aria-label="Период">
+              {(["day", "week", "month", "year", "all"] as const).map(
+                (period) => (
+                  <button
+                    key={period}
+                    type="button"
+                    aria-pressed={activePeriod === period}
+                    onClick={() => handlePeriodChange(period)}
+                  >
+                    {period === "day" && "Днес"}
+                    {period === "week" && "Седмица"}
+                    {period === "month" && "Месец"}
+                    {period === "year" && "Година"}
+                    {period === "all" && "Всички времена"}
+                  </button>
+                )
+              )}
+            </div>
           </div>
-          <div className="flex items-center space-x-1 sm:space-x-2 flex-wrap gap-1">
-            {(["day", "week", "month", "year", "all"] as const).map(
-              (period) => (
+          <div className="mt-4 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowTotals((prev) => !prev)}
+              aria-pressed={showTotals}
+              className="mchip mchip--square"
+              style={{ "--chip": TOTALS_COLOR } as React.CSSProperties}
+              title="Колони с общия брой гласове"
+            >
+              <span className="chip-bars" aria-hidden="true">
+                <i />
+                <i />
+                <i />
+              </span>
+              Общо
+            </button>
+            <span className="chip-rule" aria-hidden="true" />
+            <button
+              type="button"
+              onClick={toggleAllTypes}
+              aria-pressed={allTypesSelected}
+              className="mchip"
+              style={{ "--chip": "#334155" } as React.CSSProperties}
+            >
+              Всички
+            </button>
+            {VOTE_TYPE_ORDER.map((type) => {
+              const details = getVoteTypeDetails(type);
+              return (
                 <button
-                  key={period}
+                  key={type}
                   type="button"
-                  onClick={() => handlePeriodChange(period)}
-                  className={`px-2 py-1 sm:px-3 sm:py-1.5 text-xs font-medium rounded-md transition-colors
-                    ${
-                      activePeriod === period
-                        ? "bg-indigo-600 text-white"
-                        : "bg-slate-200 text-slate-700 hover:bg-slate-300"
-                    }`}
+                  onClick={() => toggleType(type)}
+                  aria-pressed={selectedTypes.includes(type)}
+                  className="mchip"
+                  style={{ "--chip": details.color } as React.CSSProperties}
                 >
-                  {period === "day" && "Днес"}
-                  {period === "week" && "Седмица"}
-                  {period === "month" && "Месец"}
-                  {period === "year" && "Година"}
-                  {period === "all" && "Всички времена"}
+                  <span className="chip-dot" aria-hidden="true" />
+                  {details.label}
                 </button>
-              )
-            )}
+              );
+            })}
           </div>
         </div>
-        <div className="flex flex-wrap items-center gap-2.5 mb-5">
-          <button
-            type="button"
-            onClick={() => setShowTotals((prev) => !prev)}
-            aria-pressed={showTotals}
-            className={`px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
-              showTotals
-                ? "bg-teal-500 text-white border-teal-500"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            Общо
-          </button>
-          <span className="h-5 w-px bg-slate-200" aria-hidden="true" />
-          <button
-            type="button"
-            onClick={toggleAllTypes}
-            className={`px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
-              allTypesSelected
-                ? "bg-slate-800 text-white border-slate-800"
-                : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-            }`}
-          >
-            Всички
-          </button>
-          {VOTE_TYPE_ORDER.map((type) => {
-            const details = getVoteTypeDetails(type);
-            const active = selectedTypes.includes(type);
-            return (
-              <button
-                key={type}
-                type="button"
-                onClick={() => toggleType(type)}
-                aria-pressed={active}
-                className={`flex items-center gap-2 px-4 py-2 text-xs font-semibold rounded-full border transition-colors ${
-                  active
-                    ? "text-white"
-                    : "bg-white text-slate-700 border-slate-300 hover:bg-slate-100"
-                }`}
-                style={
-                  active
-                    ? { backgroundColor: details.color, borderColor: details.color }
-                    : undefined
-                }
-              >
-                <span
-                  className="h-2.5 w-2.5 rounded-full border border-white/60"
-                  style={{ backgroundColor: details.color }}
-                />
-                {details.label}
-              </button>
-            );
-          })}
-        </div>
+        <div className="px-4 pb-5 pt-3 md:px-6">
         {isLoadingTimeline ? (
           <div className="text-center py-10 text-slate-600 h-96 flex items-center justify-center">
             <Loader text="Зареждане на данни..." />
@@ -365,6 +417,7 @@ function StatsPageContent() {
               groupBy={timelineGroupBy}
               selectedTypes={selectedTypes}
               showTotals={showTotals}
+              onPointSelect={handlePointSelect}
             />
           </div>
         ) : (
@@ -391,30 +444,39 @@ function StatsPageContent() {
             )}
           </div>
         )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
         <div className="p-4 bg-white shadow-md rounded-lg">
-          <h3 className="text-xl font-semibold text-slate-700 mb-1">
+          <h3 className="text-xl font-semibold text-slate-800 mb-1 tracking-[-0.01em]">
             Удовлетвореност (общо)
           </h3>
           <p className="text-sm text-slate-500">{periodLabel}</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Кликнете върху част от кръга, за да видите тези отзиви
+          </p>
           <div className="h-96 bg-white rounded">
             <SatisfactionPieChart
               summary={summary}
               isLoading={isLoadingSummary}
+              onVoteSelect={handleVoteSelect}
             />
           </div>
         </div>
         <div className="p-4 bg-white shadow-md rounded-lg">
-          <h3 className="text-xl font-semibold text-slate-700 mb-1">
+          <h3 className="text-xl font-semibold text-slate-800 mb-1 tracking-[-0.01em]">
             Удовлетвореност (детайлно)
           </h3>
           <p className="text-sm text-slate-500">{periodLabel}</p>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Кликнете върху колона, за да видите тези отзиви
+          </p>
           <div className="h-96 bg-white rounded">
             <SatisfactionBarChart
               summary={summary}
               isLoading={isLoadingSummary}
+              onVoteSelect={handleVoteSelect}
             />
           </div>
         </div>
@@ -455,7 +517,14 @@ function StatsPageContent() {
                       ? ((item.count / summary.totalVotes) * 100).toFixed(2)
                       : "0.00";
                   return (
-                    <tr key={item._id} className="hover:bg-slate-50">
+                    <tr
+                      key={item._id}
+                      onClick={() =>
+                        item._id && handleVoteSelect(String(item._id))
+                      }
+                      className="hover:bg-slate-50 cursor-pointer"
+                      title="Виж отзивите с тази оценка"
+                    >
                       <td className="px-4 py-4 whitespace-nowrap text-sm font-medium text-slate-900 flex items-center">
                         <span
                           className="h-3 w-3 rounded-full mr-3"
