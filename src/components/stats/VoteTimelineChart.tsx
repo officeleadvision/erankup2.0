@@ -92,6 +92,7 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
             {
               type: "bar" as const,
               label: "Общо",
+              pointStyle: "rect" as const,
               data: totals,
               backgroundColor: "rgba(20, 184, 166, 0.35)",
               borderColor: "rgb(13, 148, 136)",
@@ -116,6 +117,7 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
           type: "line" as const,
           voteKey: type,
           label: details.label,
+          pointStyle: "circle" as const,
           data: timelineData.map((point) => point.byType?.[type] ?? 0),
           borderColor: details.color,
           backgroundColor: details.color,
@@ -196,7 +198,16 @@ const VoteTimelineChart: React.FC<VoteTimelineChartProps> = ({
       legend: {
         display: selectedTypes.length > 0 || !showTotals,
         position: "bottom",
-        labels: { usePointStyle: true, boxWidth: 8 },
+        labels: {
+          usePointStyle: true,
+          boxWidth: 9,
+          boxHeight: 9,
+          // The marker is centred inside pointStyleWidth, so a slot wider
+          // than the marker is what puts air between it and the label.
+          pointStyleWidth: 24,
+          padding: 18, // gap between legend entries
+          font: { size: 12 },
+        },
       },
       title: { display: false },
       tooltip: {
