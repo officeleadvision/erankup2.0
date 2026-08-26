@@ -283,7 +283,7 @@ function StatsPageContent() {
 
       <form
         onSubmit={handleCustomDateFilterSubmit}
-        className="mb-8 p-4 bg-white shadow-md rounded-lg flex flex-col sm:flex-row gap-4 items-center"
+        className="mb-8 p-4 bg-white shadow-md rounded-lg flex flex-col sm:flex-row gap-4 items-stretch sm:items-end"
       >
         <div className="flex-1 w-full sm:w-auto">
           <label
@@ -319,7 +319,7 @@ function StatsPageContent() {
         </div>
         <button
           type="submit"
-          className="w-full sm:w-auto mt-2 sm:mt-0 self-end sm:self-center px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="w-full sm:w-auto mt-2 sm:mt-0 px-5 py-2 border border-transparent bg-indigo-600 text-white font-medium rounded-md shadow-sm hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 transition-colors"
         >
           Филтрирай
         </button>
